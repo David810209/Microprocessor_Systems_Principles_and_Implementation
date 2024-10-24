@@ -75,6 +75,7 @@ module decode #(parameter XLEN = 32)
     input  [XLEN-1 : 0]     pc_i,
     input  [XLEN-1 : 0]     instruction_i,
     input                   branch_hit_i,
+    input                   jalr_hit_i,
     input                   branch_decision_i,
 
     // From CSR
@@ -104,6 +105,7 @@ module decode #(parameter XLEN = 32)
     output reg              alu_muldiv_sel_o,
     output reg              shift_sel_o,
     output reg              branch_hit_o,
+    output reg              jalr_hit_o,
     output reg              branch_decision_o,
     output reg              is_jalr_o,
     output reg              is_fencei_o,
@@ -509,6 +511,7 @@ begin
         csr_we_o <= 0;
         csr_imm_o <= 0;
         branch_hit_o <= 0;
+        jalr_hit_o <= 0;
         branch_decision_o <= 0;
         is_fencei_o <= 0;
         amo_type_o <= 0;
@@ -549,6 +552,7 @@ begin
         csr_we_o <= csr_we_o;
         csr_imm_o <= csr_imm_o;
         branch_hit_o <= branch_hit_o;
+        jalr_hit_o <= jalr_hit_o;
         branch_decision_o <= branch_decision_o;
         is_fencei_o <= is_fencei_o;
         amo_type_o <= amo_type_o;
@@ -590,6 +594,7 @@ begin
         csr_we_o <= 0;
         csr_imm_o <= 0;
         branch_hit_o <= 0;
+        jalr_hit_o <= 0;
         branch_decision_o <= 0;
         is_fencei_o <= 0;
         amo_type_o <= 0;
@@ -630,6 +635,7 @@ begin
         csr_we_o <= rv32_csr & !((rv32_csrrs | rv32_csrrc) & rv32_instr[19: 15] == 5'b00000);
         csr_imm_o <= csr_imm;
         branch_hit_o <= branch_hit_i;
+        jalr_hit_o <= jalr_hit_i;
         branch_decision_o <= branch_decision_i;
         is_fencei_o <= rv32_fencei;
         amo_type_o <= amo_type;

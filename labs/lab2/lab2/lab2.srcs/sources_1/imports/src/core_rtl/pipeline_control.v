@@ -68,6 +68,8 @@ module pipeline_control(
     input        unsupported_instr_i,
     input        is_load_hazard,
     input        branch_hit_i,
+    input        jalr_hit_i,
+    input        jalr_misprediction_i,
 
     // from Execution.
     input        branch_taken_i,
@@ -100,17 +102,32 @@ wire branch_flush;
 
 `ifdef ENABLE_BRANCH_PREDICTION
     // with branch predictor
+`ifdef ENABLE_RAP
+    assign branch_flush = (branch_taken_i & !branch_hit_i & !jalr_hit_i) | branch_misprediction_i;
+`else
     assign branch_flush = (branch_taken_i & !branch_hit_i) | branch_misprediction_i;
+`endif 
+
 `else
     // without branch predictor
     assign branch_flush = branch_taken_i;
 `endif
 
+wire jalr_flush;
+
+`ifdef ENABLE_RAP
+    // with branch predictor
+    assign jalr_flush = jalr_misprediction_i;
+`else
+    // without branch predictor
+    assign jalr_flush = 0;
+`endif
+
 // ================================================================================
 //  Output signals
 //
-assign flush2fet_o = branch_flush | sys_jump_i | is_fencei_i;
-assign flush2dec_o = branch_flush | sys_jump_i | is_fencei_i | is_load_hazard | unsupported_instr_i;
+assign flush2fet_o = branch_flush | jalr_flush | sys_jump_i | is_fencei_i;
+assign flush2dec_o = branch_flush | jalr_flush |sys_jump_i | is_fencei_i | is_load_hazard | unsupported_instr_i;
 assign flush2exe_o = is_fencei_i | sys_jump_i;
 assign flush2mem_o = sys_jump_i;
 assign flush2wbk_o = sys_jump_i;

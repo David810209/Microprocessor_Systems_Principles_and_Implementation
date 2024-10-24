@@ -79,6 +79,7 @@ module execute #( parameter XLEN = 32 )
     input                   is_jal_i,
     input                   is_jalr_i,
     input                   branch_hit_i,
+    input                   jalr_hit_i,
     input                   branch_decision_i,
 
     input                   regfile_we_i,
@@ -91,6 +92,7 @@ module execute #( parameter XLEN = 32 )
     input                   is_fencei_i,
     input                   is_amo_i,
     input  [4 : 0]          amo_type_i,
+
 
     // From CSR.
     input  [ 4 : 0]         csr_imm_i,
@@ -110,6 +112,11 @@ module execute #( parameter XLEN = 32 )
     output                  is_branch_o,
     output                  branch_taken_o,
     output                  branch_misprediction_o,
+
+    // rap
+    input     [XLEN-1 : 0]  dec_cur_pc_i,
+    output                  jalr_misprediction_o,
+    output                  jalr_target_pc_o,
 
     // Pipeline stall signal generator, activated when executing
     //    multicycle mul, div and rem instructions.
@@ -249,6 +256,11 @@ assign result = alu_muldiv_sel_i ? muldiv_result : alu_result;
 assign stall_from_exe_o = alu_muldiv_sel_i & !muldiv_ready;
 
 // ===============================================================================
+//  RAP signal
+//
+assign jalr_misprediction_o = jalr_hit_i & (branch_target_addr_o != dec_cur_pc_i) & is_jalr_i;
+
+// ===============================================================================
 //  CSR
 //
 wire [XLEN-1 : 0] csr_inputA = csr_data_i;
@@ -386,48 +398,82 @@ always @(posedge clk_i) begin
         end_cnt_area <= 0;
     end else begin
         //0000_1088 main
-        if (pc_i == 32'h0000_1088) begin
+       if (pc_i == 32'h0000_1088) begin
+//         if (pc_i == 32'h0000_1044) begin
+
             start_cnt_area <= 1;
         end
         // 0000_01e8 or 0000_01ec end 
-        if (pc_i == 32'h0000_01e8 || pc_i == 32'h0000_01ec) begin
-            end_cnt_area <= 1;
+       if (pc_i == 32'h0000_1798) begin
+//         if (pc_i == 32'h0000_1074) begin
+
+               end_cnt_area <= 1;
         end
     end
 end
 wire total_cycle_flag;
 assign total_cycle_flag = (start_cnt_area && (!end_cnt_area));
  
-wire forward_jump_flag = total_cycle_flag && is_branch_i && (pc_i > pc_o);
-wire backward_jump_flag = total_cycle_flag && is_branch_i && (pc_i < pc_o);
-wire unconditional_jump_flag = total_cycle_flag && (is_jal_i);
+wire forward_jump_flag = total_cycle_flag && is_branch_i && (pc_i <  branch_target_addr_o);
+wire backward_jump_flag = total_cycle_flag && is_branch_i && (pc_i >  branch_target_addr_o);
+wire jump_flag = total_cycle_flag && (is_jal_i);
+wire jalr_flag = total_cycle_flag && is_jalr_i;
 
-wire forward_jump_miss = forward_jump_flag && (branch_misprediction_o || !branch_hit_i);
-wire backward_jump_miss = backward_jump_flag && (branch_misprediction_o || !branch_hit_i);
-wire unconditional_jump_miss = unconditional_jump_flag && (branch_misprediction_o || !branch_hit_i);
+wire forward_jump_mispredict = forward_jump_flag && (branch_misprediction_o);
+wire forward_jump_miss = forward_jump_flag && (!branch_hit_i);
+wire backward_jump_mispredict = backward_jump_flag && (branch_misprediction_o);
+wire backward_jump_miss = backward_jump_flag && (!branch_hit_i);
+wire jump_mispredict = jump_flag && (branch_misprediction_o);
+wire jump_miss = jump_flag && (!branch_hit_i);
+wire jalr_miss = jalr_flag && (!jalr_hit_i);
+wire jalr_mispredict = jalr_flag && (jalr_misprediction_o);
 
-(* mark_debug = "true" *) reg [64-1:0] forward_jump_cnt;
-(* mark_debug = "true" *) reg [64-1:0] backward_jump_cnt;
-(* mark_debug = "true" *) reg [64-1:0] unconditional_jump_cnt;
+(* mark_debug = "true" *) reg [64-1:0] total_cycle_cnt;
+(* mark_debug = "true" *) reg [32-1:0] stall_cycle_cnt;
 
-(* mark_debug = "true" *) reg [64-1:0] forward_jump_miss_cnt;
-(* mark_debug = "true" *) reg [64-1:0] backward_jump_miss_cnt;
-(* mark_debug = "true" *) reg [64-1:0] unconditional_jump_miss_cnt;
+(* mark_debug = "true" *) reg [32-1:0] forward_jump_cnt;
+(* mark_debug = "true" *) reg [32-1:0] backward_jump_cnt;
+(* mark_debug = "true" *) reg [32-1:0] jump_cnt;
 
+(* mark_debug = "true" *) reg [32-1:0] forward_jump_miss_cnt;
+(* mark_debug = "true" *) reg [32-1:0] backward_jump_miss_cnt;
+(* mark_debug = "true" *) reg [32-1:0] jump_miss_cnt;
+
+(* mark_debug = "true" *) reg [32-1:0] forward_jump_mispredict_cnt;
+(* mark_debug = "true" *) reg [32-1:0] backward_jump_mispredict_cnt;
+(* mark_debug = "true" *) reg [32-1:0] jump_mispredict_cnt;
+
+(* mark_debug = "true" *) reg [16-1:0] jalr_miss_cnt;
+(* mark_debug = "true" *) reg [16-1:0] jalr_mispredict_cnt;
+(* mark_debug = "true" *) reg [32-1:0] jalr_cycle_cnt;
 always @(posedge clk_i) begin
     if (rst_i) begin
         forward_jump_cnt <= 0;
         backward_jump_cnt <= 0;
-        unconditional_jump_cnt <= 0;
+        jump_cnt <= 0;
+        total_cycle_cnt <= 0;
+        stall_cycle_cnt <= 0;
+        jalr_miss_cnt <= 0;
+        jalr_mispredict_cnt <= 0;
+        jalr_cycle_cnt <= 0;
     end else begin
+        if(total_cycle_flag ) begin
+            total_cycle_cnt <= total_cycle_cnt + 1;
+            if(stall_i) stall_cycle_cnt <= stall_cycle_cnt + 1;
+        end 
+
+        if (jalr_flag) begin
+            jalr_cycle_cnt <= jalr_cycle_cnt + 1;
+        end
+
         if (forward_jump_flag) begin
             forward_jump_cnt <= forward_jump_cnt + 1;
         end
         if (backward_jump_flag) begin
             backward_jump_cnt <= backward_jump_cnt + 1;
         end
-        if (unconditional_jump_flag) begin
-            unconditional_jump_cnt <= unconditional_jump_cnt + 1;
+        if (jump_flag) begin
+            jump_cnt <= jump_cnt + 1;
         end
     end
 end
@@ -436,7 +482,8 @@ always @(posedge clk_i) begin
     if (rst_i) begin
         forward_jump_miss_cnt <= 0;
         backward_jump_miss_cnt <= 0;
-        unconditional_jump_miss_cnt <= 0;
+        jump_miss_cnt <= 0;
+        jalr_miss_cnt <= 0;
     end else begin
         if (forward_jump_miss) begin
             forward_jump_miss_cnt <= forward_jump_miss_cnt + 1;
@@ -444,10 +491,103 @@ always @(posedge clk_i) begin
         if (backward_jump_miss) begin
             backward_jump_miss_cnt <= backward_jump_miss_cnt + 1;
         end
-        if (unconditional_jump_miss) begin
-            unconditional_jump_miss_cnt <= unconditional_jump_miss_cnt + 1;
+        if (jump_miss) begin
+            jump_miss_cnt <= jump_miss_cnt + 1;
+        end
+        if(jalr_miss)begin
+            jalr_miss_cnt <= jalr_miss_cnt + 1;
         end
     end
 end
+
+always @(posedge clk_i) begin
+    if (rst_i) begin
+        forward_jump_mispredict_cnt <= 0;
+        backward_jump_mispredict_cnt <= 0;
+        jump_mispredict_cnt <= 0;
+        jalr_mispredict_cnt <= 0;
+    end else begin
+        if (forward_jump_mispredict) begin
+            forward_jump_mispredict_cnt <= forward_jump_mispredict_cnt + 1;
+        end
+        if (backward_jump_mispredict) begin
+            backward_jump_mispredict_cnt <= backward_jump_mispredict_cnt + 1;
+        end
+        if (jump_mispredict) begin
+            jump_mispredict_cnt <= jump_mispredict_cnt + 1;
+        end
+
+        if(jalr_mispredict)begin
+            jalr_mispredict_cnt <= jalr_mispredict_cnt + 1;
+        end
+    end
+end
+
+
+/*
+wire operation_beq = (operation_sel_i == 3'b000);
+wire operation_bne = (operation_sel_i == 3'b001);
+wire operation_blt = (operation_sel_i == 3'b100);
+wire operation_bge = (operation_sel_i == 3'b101);
+wire operation_bltu = (operation_sel_i == 3'b110);
+wire operation_bgeu = (operation_sel_i == 3'b111);
+*/
+//wire beq_flag = branch_operation == 3'b000 && total_cycle_flag && is_branch_i;
+//wire bne_flag = branch_operation == 3'b001&& total_cycle_flag&& is_branch_i;
+//wire blt_flag = branch_operation == 3'b100&& total_cycle_flag&& is_branch_i;
+//wire bge_flag = branch_operation == 3'b101&& total_cycle_flag&& is_branch_i;
+//wire bltu_flag = branch_operation == 3'b110&& total_cycle_flag&& is_branch_i;
+//wire bgeu_flag = branch_operation == 3'b111&& total_cycle_flag&& is_branch_i;
+
+//(* mark_debug = "true" *) reg [32-1:0] beq_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] bne_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] blt_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] bge_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] bltu_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] bgeu_cnt;
+
+//(* mark_debug = "true" *) reg [32-1:0] beq_miss_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] bne_miss_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] blt_miss_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] bge_miss_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] bltu_miss_cnt;
+//(* mark_debug = "true" *) reg [32-1:0] bgeu_miss_cnt;
+
+//always @(posedge clk_i) begin
+//    if (rst_i) begin
+//        beq_cnt <= 0;
+//        bne_cnt <= 0;
+//        blt_cnt <= 0;
+//        bge_cnt <= 0;
+//        bltu_cnt <= 0;
+//        bgeu_cnt <= 0;
+//        beq_miss_cnt <= 0;
+//        bne_miss_cnt <= 0;
+//        blt_miss_cnt <= 0;
+//        bge_miss_cnt <= 0;
+//        bltu_miss_cnt <= 0;
+//        bgeu_miss_cnt <= 0;
+//    end else begin
+//        if(beq_flag) beq_cnt <= beq_cnt + 1;
+//        if(beq_flag && (branch_misprediction_o || !branch_hit_i)) beq_miss_cnt <= beq_miss_cnt + 1;
+        
+//        if(bne_flag) bne_cnt <= bne_cnt + 1;
+//        if(bne_flag && (branch_misprediction_o || !branch_hit_i)) bne_miss_cnt <= bne_miss_cnt + 1;
+
+//        if(blt_flag) blt_cnt <= blt_cnt + 1;
+//        if(blt_flag && (branch_misprediction_o || !branch_hit_i)) blt_miss_cnt <= blt_miss_cnt + 1;
+
+//        if(bge_flag) bge_cnt <= bge_cnt + 1;
+//        if(bge_flag && (branch_misprediction_o || !branch_hit_i)) bge_miss_cnt <= bge_miss_cnt + 1;
+
+//        if(bltu_flag) bltu_cnt <= bltu_cnt + 1;
+//        if(bltu_flag && (branch_misprediction_o || !branch_hit_i)) bltu_miss_cnt <= bltu_miss_cnt + 1;
+
+//        if(bgeu_flag) bgeu_cnt <= bgeu_cnt + 1;
+//        if(bgeu_flag && (branch_misprediction_o || !branch_hit_i)) bgeu_miss_cnt <= bgeu_miss_cnt + 1;
+//    end
+//end
+
+
 
 endmodule

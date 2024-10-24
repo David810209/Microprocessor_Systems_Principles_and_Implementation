@@ -78,6 +78,9 @@
 // Branch Prediction
 `define ENABLE_BRANCH_PREDICTION
 
+//return address predictor
+`define ENABLE_RAP
+
 // Atomic Unit
 `define ENABLE_ATOMIC_UNIT
 
@@ -89,3 +92,4 @@
 
 // SIM_FNAME defines the RISC-V program path of an ELF file for simulation.
 `define SIM_FNAME "/home/zichen/zichen/mpd/aquila_sw/CoreMark/coremark.elf"
+//`define SIM_FNAME "/home/zichen/zichen/mpd/aquila_sw/test/test.elf"

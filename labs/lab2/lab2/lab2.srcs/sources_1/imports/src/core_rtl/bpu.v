@@ -64,7 +64,7 @@
 // =============================================================================
 `include "aquila_config.vh"
 
-module bpu #( parameter ENTRY_NUM = 64, parameter XLEN = 32 )
+module bpu #( parameter ENTRY_NUM = 32, parameter XLEN = 32 )
 (
     // System signals
     input               clk_i,

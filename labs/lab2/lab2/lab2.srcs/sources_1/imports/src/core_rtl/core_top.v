@@ -132,6 +132,7 @@ module core_top #(
 wire [XLEN-1 : 0] fet2dec_instr;
 wire [XLEN-1 : 0] fet2dec_pc;
 wire              fet_branch_hit;
+wire              fet_jalr_hit;
 wire              fet_branch_decision;
 
 wire              fet2dec_valid;
@@ -148,6 +149,7 @@ wire              dec_is_branch;
 wire              dec_is_jal;
 wire              dec_is_jalr;
 wire              dec_branch_hit;
+wire              dec_jalr_hit;
 wire              dec_branch_decision;
 
 // Signals sent to Pipeline Control
@@ -210,6 +212,9 @@ wire              exe_branch_misprediction;
 wire              exe_is_fencei;
 wire              exe_is_amo2mem;
 wire [ 4 : 0]     exe_amo_type2mem;
+
+wire             exe_jalr_misprediction;
+
 
 // to FWD unit and Memory stage
 wire [XLEN-1 : 0] exe_p_data;
@@ -312,6 +317,10 @@ wire [XLEN-1 : 0] csr_sys_jump_data;
 wire              bpu_branch_hit;
 wire              bpu_branch_decision;
 wire [XLEN-1 : 0] bpu_branch_target_addr;
+
+//return address predictor(RAP)
+wire              rap_jalr_hit;
+wire [XLEN-1 : 0] rap_jalr_target_addr;
 
 // Misc. signals
 wire              irq_enable;
@@ -489,6 +498,8 @@ pipeline_control Pipeline_Control(
     .unsupported_instr_i(dec_unsupported_instr),
     .branch_hit_i(dec_branch_hit),
     .is_load_hazard(dec2plc_load_hazard),
+    .jalr_hit_i(dec_jalr_hit),
+    .jalr_misprediction_i(exe_jalr_misprediction),
 
     // from Execute
     .branch_taken_i(exe_branch_taken),
@@ -580,6 +591,27 @@ bpu #(.XLEN(XLEN)) Branch_Prediction_Unit(
 );
 
 // =============================================================================
+rap #(.XLEN(XLEN)) Jalr_Prediction_Unit(
+    // Top-level system signals
+    .clk_i(clk_i),
+    .rst_i(rst_i),
+    .stall_i(stall_pipeline),
+    .stall_data_hazard_i(stall_data_hazard),
+
+    // from Program_Counter
+    .pc_i(pcu_pc),
+
+    // from Decode
+    .is_jalr_i(dec_is_jalr),
+    .is_jal_i(dec_is_jal),
+    .dec_pc_i(dec_pc),
+
+    // to Program_Counter and Fetch
+    .jalr_hit_o(rap_jalr_hit),
+    .jalr_target_addr_o(rap_jalr_target_addr)
+);
+
+// =============================================================================
 reg_file Register_File(
     // Top-level system signals
     .clk_i(clk_i),
@@ -620,12 +652,17 @@ program_counter Program_Counter(
     .bpu_branch_decision_i(bpu_branch_decision),
     .bpu_branch_target_addr_i(bpu_branch_target_addr),
 
+    // from RAP
+    .rap_jalr_hit_i(rap_jalr_hit),
+    .rap_jalr_target_addr_i(rap_jalr_target_addr),
+
     // System Jump operation
     .sys_jump_i(csr_sys_jump),
     .sys_jump_data_i(csr_sys_jump_data),
 
     // frome Decode
     .dec_branch_hit_i(dec_branch_hit),
+    .dec_jalr_hit_i(dec_jalr_hit),
     .dec_branch_decision_i(dec_branch_decision),
     .dec_pc_i(dec_pc),
 
@@ -635,6 +672,8 @@ program_counter Program_Counter(
     .exe_branch_target_addr_i(exe_branch_target_addr),
     .exe_branch_restore_addr_i(exe_branch_restore_pc),
     .is_fencei_i(exe_is_fencei),
+    .exe_jalr_misprediction_i(exe_jalr_misprediction),
+
 
     // to Fetch, I-memory
     .pc_o(pcu_pc)
@@ -652,6 +691,7 @@ fetch Fetch(
 
     // from BPU
     .branch_hit_i(bpu_branch_hit),
+    .jalr_hit_i(rap_jalr_hit),
     .branch_decision_i(bpu_branch_decision),
 
     // from I-memory
@@ -664,6 +704,7 @@ fetch Fetch(
     // to Decode
     .instruction_o(fet2dec_instr),
     .branch_hit_o(fet_branch_hit),
+    .jalr_hit_o(fet_jalr_hit),
     .branch_decision_o(fet_branch_decision),
 
      // Has instruction fetch being successiful?
@@ -686,6 +727,7 @@ decode Decode(
     // Signals from Fetch.
     .instruction_i(fet2dec_instr),
     .branch_hit_i(fet_branch_hit),
+    .jalr_hit_i(fet_jalr_hit),
     .branch_decision_i(fet_branch_decision),
 
     // Signals from CSR.
@@ -713,6 +755,7 @@ decode Decode(
     .alu_muldiv_sel_o(dec2exe_alu_muldiv_sel),
     .shift_sel_o(dec2exe_shift_sel),
     .branch_hit_o(dec_branch_hit), //also to PLC and PCU
+    .jalr_hit_o(dec_jalr_hit),
     .branch_decision_o(dec_branch_decision),
     .is_jalr_o(dec_is_jalr),
     .is_fencei_o(dec2exe_is_fencei),
@@ -792,6 +835,7 @@ execute Execute(
     .is_jalr_i(dec_is_jalr),
     .is_fencei_i(dec2exe_is_fencei),
     .branch_hit_i(dec_branch_hit),
+    .jalr_hit_i(dec_jalr_hit),
     .branch_decision_i(dec_branch_decision),
 
     .regfile_we_i(dec2exe_regfile_we),
@@ -819,6 +863,10 @@ execute Execute(
     .branch_misprediction_o(exe_branch_misprediction),
     .branch_target_addr_o(exe_branch_target_addr),     // to PCU and BPU
     .branch_restore_pc_o(exe_branch_restore_pc),       // to PCU only
+
+    // rap
+    .dec_cur_pc_i(fet2dec_pc),
+    .jalr_misprediction_o(exe_jalr_misprediction),
 
     // Pipeline stall signal generator, activated when executing
     //    multicycle mul, div and rem instructions.

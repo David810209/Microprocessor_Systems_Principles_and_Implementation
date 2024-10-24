@@ -91,10 +91,14 @@ module fetch #( parameter XLEN = 32 )
     input                   branch_hit_i,
     input                   branch_decision_i,
 
+    // from rap
+    input                   jalr_hit_i,
+
     // to Decode
     output reg [XLEN-1 : 0] pc_o,
     output reg [XLEN-1 : 0] instruction_o,
     output reg              branch_hit_o,
+    output reg              jalr_hit_o,
     output reg              branch_decision_o,
 
      // Has instruction fetch being successiful?
@@ -140,6 +144,7 @@ begin
         pc_o <= 32'h00000000;
         fetch_valid_o <= 0;
         branch_hit_o <= 0;
+        jalr_hit_o <= 0;
         branch_decision_o <= 0;
     end
     else if (stall_i)
@@ -147,6 +152,7 @@ begin
         pc_o <= pc_o;
         fetch_valid_o <= fetch_valid_o;
         branch_hit_o <= branch_hit_o;
+        jalr_hit_o <= jalr_hit_o;
         branch_decision_o <= branch_decision_o;
     end
     else if (flush_i)
@@ -154,6 +160,7 @@ begin
         pc_o <= pc_i;
         fetch_valid_o <= 0;
         branch_hit_o <= 0;
+        jalr_hit_o <= 0;
         branch_decision_o <= 0;
     end
     else
@@ -161,6 +168,7 @@ begin
         pc_o <= pc_i;
         fetch_valid_o <= 1; // Fetched code is always valid when there is no MMU.
         branch_hit_o <= branch_hit_i;
+        jalr_hit_o <= jalr_hit_i;
         branch_decision_o <= branch_decision_i;
     end
 end
