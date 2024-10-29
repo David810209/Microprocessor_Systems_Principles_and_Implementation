@@ -68,8 +68,8 @@ module pipeline_control(
     input        unsupported_instr_i,
     input        is_load_hazard,
     input        branch_hit_i,
-    input        jalr_hit_i,
-    input        jalr_misprediction_i,
+    input        ret_hit_i,
+    input        ret_misprediction_i,
 
     // from Execution.
     input        branch_taken_i,
@@ -95,7 +95,10 @@ module pipeline_control(
     output       flush2wbk_o,
 
     //  Signals that stall PCU and Fetch due to load-use data hazard,
-    output       data_hazard_o
+    output       data_hazard_o,
+
+    //to rap
+    output       branch_flush_o
 );
 
 wire branch_flush;
@@ -103,7 +106,7 @@ wire branch_flush;
 `ifdef ENABLE_BRANCH_PREDICTION
     // with branch predictor
 `ifdef ENABLE_RAP
-    assign branch_flush = (branch_taken_i & !branch_hit_i & !jalr_hit_i) | branch_misprediction_i;
+    assign branch_flush = (branch_taken_i & !branch_hit_i & !ret_hit_i) | branch_misprediction_i;
 `else
     assign branch_flush = (branch_taken_i & !branch_hit_i) | branch_misprediction_i;
 `endif 
@@ -113,24 +116,24 @@ wire branch_flush;
     assign branch_flush = branch_taken_i;
 `endif
 
-wire jalr_flush;
+wire ret_flush;
 
 `ifdef ENABLE_RAP
     // with branch predictor
-    assign jalr_flush = jalr_misprediction_i;
+    assign ret_flush = ret_misprediction_i;
 `else
     // without branch predictor
-    assign jalr_flush = 0;
+    assign ret_flush = 0;
 `endif
 
 // ================================================================================
 //  Output signals
 //
-assign flush2fet_o = branch_flush | jalr_flush | sys_jump_i | is_fencei_i;
-assign flush2dec_o = branch_flush | jalr_flush |sys_jump_i | is_fencei_i | is_load_hazard | unsupported_instr_i;
+assign flush2fet_o = branch_flush | ret_flush | sys_jump_i | is_fencei_i;
+assign flush2dec_o = branch_flush | ret_flush |sys_jump_i | is_fencei_i | is_load_hazard | unsupported_instr_i;
 assign flush2exe_o = is_fencei_i | sys_jump_i;
 assign flush2mem_o = sys_jump_i;
 assign flush2wbk_o = sys_jump_i;
 assign data_hazard_o = is_load_hazard;
-
+assign branch_flush_o = branch_flush;
 endmodule

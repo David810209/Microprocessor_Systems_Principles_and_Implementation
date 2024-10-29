@@ -132,7 +132,7 @@ module core_top #(
 wire [XLEN-1 : 0] fet2dec_instr;
 wire [XLEN-1 : 0] fet2dec_pc;
 wire              fet_branch_hit;
-wire              fet_jalr_hit;
+wire              fet_ret_hit;
 wire              fet_branch_decision;
 
 wire              fet2dec_valid;
@@ -148,8 +148,9 @@ wire [XLEN-1 : 0] dec_pc;
 wire              dec_is_branch;
 wire              dec_is_jal;
 wire              dec_is_jalr;
+wire              dec_is_ret;
 wire              dec_branch_hit;
-wire              dec_jalr_hit;
+wire              dec_ret_hit;
 wire              dec_branch_decision;
 
 // Signals sent to Pipeline Control
@@ -213,8 +214,8 @@ wire              exe_is_fencei;
 wire              exe_is_amo2mem;
 wire [ 4 : 0]     exe_amo_type2mem;
 
-wire             exe_jalr_misprediction;
-
+wire             exe_ret_misprediction;
+wire             exe_ret_executed;
 
 // to FWD unit and Memory stage
 wire [XLEN-1 : 0] exe_p_data;
@@ -292,6 +293,7 @@ wire plc2dec_flush;
 wire plc2exe_flush;
 wire plc2mem_flush;
 wire plc2wbk_flush;
+wire plc_branch_flush;
 
 // Program Counter Unit (PCU)
 wire [XLEN-1 : 0] pcu_pc;
@@ -319,8 +321,8 @@ wire              bpu_branch_decision;
 wire [XLEN-1 : 0] bpu_branch_target_addr;
 
 //return address predictor(RAP)
-wire              rap_jalr_hit;
-wire [XLEN-1 : 0] rap_jalr_target_addr;
+wire              rap_ret_hit;
+wire [XLEN-1 : 0] rap_ret_target_addr;
 
 // Misc. signals
 wire              irq_enable;
@@ -498,8 +500,8 @@ pipeline_control Pipeline_Control(
     .unsupported_instr_i(dec_unsupported_instr),
     .branch_hit_i(dec_branch_hit),
     .is_load_hazard(dec2plc_load_hazard),
-    .jalr_hit_i(dec_jalr_hit),
-    .jalr_misprediction_i(exe_jalr_misprediction),
+    .ret_hit_i(dec_ret_hit),
+    .ret_misprediction_i(exe_ret_misprediction),
 
     // from Execute
     .branch_taken_i(exe_branch_taken),
@@ -525,7 +527,10 @@ pipeline_control Pipeline_Control(
     .flush2wbk_o(plc2wbk_flush),
 
     // to PCU and Fetch
-    .data_hazard_o(stall_data_hazard)
+    .data_hazard_o(stall_data_hazard),
+
+    // to rap
+    .branch_flush_o(plc_branch_flush)
 );
 
 // =============================================================================
@@ -602,13 +607,19 @@ rap #(.XLEN(XLEN)) Jalr_Prediction_Unit(
     .pc_i(pcu_pc),
 
     // from Decode
-    .is_jalr_i(dec_is_jalr),
+    .is_ret_i(dec_is_ret),
     .is_jal_i(dec_is_jal),
     .dec_pc_i(dec_pc),
 
+    //from execute
+    .exe_ret_executed_i(exe_ret_executed),
+
     // to Program_Counter and Fetch
-    .jalr_hit_o(rap_jalr_hit),
-    .jalr_target_addr_o(rap_jalr_target_addr)
+    .ret_hit_o(rap_ret_hit),
+    .ret_target_addr_o(rap_ret_target_addr),
+
+    //from plc
+    .flush_i(plc_branch_flush)
 );
 
 // =============================================================================
@@ -653,8 +664,8 @@ program_counter Program_Counter(
     .bpu_branch_target_addr_i(bpu_branch_target_addr),
 
     // from RAP
-    .rap_jalr_hit_i(rap_jalr_hit),
-    .rap_jalr_target_addr_i(rap_jalr_target_addr),
+    .rap_ret_hit_i(rap_ret_hit),
+    .rap_ret_target_addr_i(rap_ret_target_addr),
 
     // System Jump operation
     .sys_jump_i(csr_sys_jump),
@@ -662,7 +673,7 @@ program_counter Program_Counter(
 
     // frome Decode
     .dec_branch_hit_i(dec_branch_hit),
-    .dec_jalr_hit_i(dec_jalr_hit),
+    .dec_ret_hit_i(dec_ret_hit),
     .dec_branch_decision_i(dec_branch_decision),
     .dec_pc_i(dec_pc),
 
@@ -672,7 +683,7 @@ program_counter Program_Counter(
     .exe_branch_target_addr_i(exe_branch_target_addr),
     .exe_branch_restore_addr_i(exe_branch_restore_pc),
     .is_fencei_i(exe_is_fencei),
-    .exe_jalr_misprediction_i(exe_jalr_misprediction),
+    .exe_ret_misprediction_i(exe_ret_misprediction),
 
 
     // to Fetch, I-memory
@@ -691,7 +702,7 @@ fetch Fetch(
 
     // from BPU
     .branch_hit_i(bpu_branch_hit),
-    .jalr_hit_i(rap_jalr_hit),
+    .ret_hit_i(rap_ret_hit),
     .branch_decision_i(bpu_branch_decision),
 
     // from I-memory
@@ -704,7 +715,7 @@ fetch Fetch(
     // to Decode
     .instruction_o(fet2dec_instr),
     .branch_hit_o(fet_branch_hit),
-    .jalr_hit_o(fet_jalr_hit),
+    .ret_hit_o(fet_ret_hit),
     .branch_decision_o(fet_branch_decision),
 
      // Has instruction fetch being successiful?
@@ -727,7 +738,7 @@ decode Decode(
     // Signals from Fetch.
     .instruction_i(fet2dec_instr),
     .branch_hit_i(fet_branch_hit),
-    .jalr_hit_i(fet_jalr_hit),
+    .ret_hit_i(fet_ret_hit),
     .branch_decision_i(fet_branch_decision),
 
     // Signals from CSR.
@@ -755,9 +766,10 @@ decode Decode(
     .alu_muldiv_sel_o(dec2exe_alu_muldiv_sel),
     .shift_sel_o(dec2exe_shift_sel),
     .branch_hit_o(dec_branch_hit), //also to PLC and PCU
-    .jalr_hit_o(dec_jalr_hit),
+    .ret_hit_o(dec_ret_hit),
     .branch_decision_o(dec_branch_decision),
     .is_jalr_o(dec_is_jalr),
+    .is_ret_o(dec_is_ret),
     .is_fencei_o(dec2exe_is_fencei),
 
     // to Execute and BPU
@@ -833,9 +845,10 @@ execute Execute(
     .is_branch_i(dec_is_branch),
     .is_jal_i(dec_is_jal),
     .is_jalr_i(dec_is_jalr),
+    .is_ret_i(dec_is_ret),
     .is_fencei_i(dec2exe_is_fencei),
     .branch_hit_i(dec_branch_hit),
-    .jalr_hit_i(dec_jalr_hit),
+    .ret_hit_i(dec_ret_hit),
     .branch_decision_i(dec_branch_decision),
 
     .regfile_we_i(dec2exe_regfile_we),
@@ -866,7 +879,8 @@ execute Execute(
 
     // rap
     .dec_cur_pc_i(fet2dec_pc),
-    .jalr_misprediction_o(exe_jalr_misprediction),
+    .ret_misprediction_o(exe_ret_misprediction),
+    .ret_executed(exe_ret_executed),
 
     // Pipeline stall signal generator, activated when executing
     //    multicycle mul, div and rem instructions.
@@ -1088,5 +1102,52 @@ CSR(
     .xcpt_cause_i(wbk2csr_xcpt_cause),
     .xcpt_tval_i(wbk2csr_xcpt_tval)
 );
+
+//profiler part
+reg start_cnt_area;
+reg end_cnt_area;
+always @(posedge clk_i) begin
+    if (rst_i) begin
+        start_cnt_area <= 0;
+        end_cnt_area <= 0;
+    end else begin
+        //0000_1088 main
+        if (exe2mem_pc == 32'h0000_1088) begin
+//if (exe2mem_pc == 32'h0000_121c) begin
+            start_cnt_area <= 1;
+        end
+        // 0000_01e8 or 0000_01ec end 
+        if (exe2mem_pc == 32'h0000_1798) begin
+//if (exe2mem_pc == 32'h0000_1900) begin
+            end_cnt_area <= 1;
+        end
+    end
+end
+wire total_cycle_flag;
+assign total_cycle_flag = (start_cnt_area && (!end_cnt_area));
+(* mark_debug = "true" *) reg [32-1:0] total_stall_mem_cnt;
+(* mark_debug = "true" *) reg [32-1:0] total_stall_exe_cnt;
+(* mark_debug = "true" *) reg [32-1:0] total_stall_hazard_cnt;
+(* mark_debug = "true" *) reg [32-1:0] branch_flush_cnt;
+always @(posedge clk_i)begin
+    if(rst_i)begin
+        total_stall_mem_cnt<= 0;
+        total_stall_exe_cnt <= 0;
+        total_stall_hazard_cnt <= 0;
+        branch_flush_cnt <= 0;
+    end
+    if(((exe_we || exe_re) && ~data_ready_i) && total_cycle_flag)begin
+            total_stall_mem_cnt <= total_stall_mem_cnt + 1;
+    end
+    if(stall_from_exe && total_cycle_flag)begin
+        total_stall_exe_cnt <= total_stall_exe_cnt + 1;
+    end
+    if(stall_data_hazard && total_cycle_flag)begin
+        total_stall_hazard_cnt <= total_stall_hazard_cnt + 1;
+    end
+    if(plc_branch_flush && total_cycle_flag )begin
+        branch_flush_cnt <= branch_flush_cnt + 1;
+    end
+end
 
 endmodule

@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps 
+//`timescale 1ns / 1ps 
 // =============================================================================
 //  Program : aquila_config.vh
 //  Author  : Chun-Jen Tsai
@@ -79,7 +79,8 @@
 `define ENABLE_BRANCH_PREDICTION
 
 //return address predictor
-`define ENABLE_RAP
+`define ENABLE_RAP 
+`define ENABLE_BS //backup storage
 
 // Atomic Unit
 `define ENABLE_ATOMIC_UNIT
@@ -91,5 +92,6 @@
 `define NOP 32'h00000013
 
 // SIM_FNAME defines the RISC-V program path of an ELF file for simulation.
-`define SIM_FNAME "/home/zichen/zichen/mpd/aquila_sw/CoreMark/coremark.elf"
+//`define SIM_FNAME "/home/zichen/zichen/mpd/aquila_sw/CoreMark/coremark.elf"
+`define SIM_FNAME "/home/zichen/zichen/mpd/aquila_sw/Dhrystone/dhry.elf"
 //`define SIM_FNAME "/home/zichen/zichen/mpd/aquila_sw/test/test.elf"

@@ -88,8 +88,8 @@ module program_counter #( parameter XLEN = 32 )
     input  [XLEN-1 : 0] bpu_branch_target_addr_i,
 
     // from RAP
-    input               rap_jalr_hit_i,
-    input  [XLEN-1 : 0] rap_jalr_target_addr_i,
+    input               rap_ret_hit_i,
+    input  [XLEN-1 : 0] rap_ret_target_addr_i,
 
     // System Jump operation
     input               sys_jump_i,
@@ -97,7 +97,7 @@ module program_counter #( parameter XLEN = 32 )
 
     // from Decode
     input               dec_branch_hit_i,
-    input               dec_jalr_hit_i,
+    input               dec_ret_hit_i,
     input               dec_branch_decision_i,
     input  [XLEN-1 : 0] dec_pc_i,
 
@@ -108,8 +108,8 @@ module program_counter #( parameter XLEN = 32 )
     input  [XLEN-1 : 0] exe_branch_restore_addr_i,  // already increment 4 in execute
     input               is_fencei_i,
 
-    input               exe_jalr_misprediction_i,
-    input  [XLEN-1 : 0] exe_jalr_target_pc_i,
+    input               exe_ret_misprediction_i,
+    input  [XLEN-1 : 0] exe_ret_target_pc_i,
 
     // to i-memory
     output [XLEN-1 : 0] pc_o
@@ -143,7 +143,7 @@ begin
     else
 
 `ifdef ENABLE_RAP
-    if (exe_branch_taken_i & !dec_branch_hit_i & !dec_jalr_hit_i) 
+    if (exe_branch_taken_i & !dec_branch_hit_i & !dec_ret_hit_i) 
         pc_r <= exe_branch_target_addr_i;
 `else 
     if (exe_branch_taken_i & !dec_branch_hit_i) 
@@ -154,7 +154,7 @@ begin
         pc_r <= dec_branch_decision_i ? exe_branch_restore_addr_i : exe_branch_target_addr_i;
 
 `ifdef ENABLE_RAP
-    else if (exe_jalr_misprediction_i)
+    else if (exe_ret_misprediction_i)
         pc_r <= exe_branch_target_addr_i;
 `endif 
 
@@ -162,8 +162,8 @@ begin
         pc_r <= sys_jump_data_i;
 
 `ifdef ENABLE_RAP
-    else if(rap_jalr_hit_i)
-        pc_r <= rap_jalr_target_addr_i;
+    else if(rap_ret_hit_i)
+        pc_r <= rap_ret_target_addr_i;
 `endif 
 
     else if (bpu_branch_hit_i & bpu_branch_decision_i)

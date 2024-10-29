@@ -75,7 +75,7 @@ module decode #(parameter XLEN = 32)
     input  [XLEN-1 : 0]     pc_i,
     input  [XLEN-1 : 0]     instruction_i,
     input                   branch_hit_i,
-    input                   jalr_hit_i,
+    input                   ret_hit_i,
     input                   branch_decision_i,
 
     // From CSR
@@ -105,9 +105,10 @@ module decode #(parameter XLEN = 32)
     output reg              alu_muldiv_sel_o,
     output reg              shift_sel_o,
     output reg              branch_hit_o,
-    output reg              jalr_hit_o,
+    output reg              ret_hit_o,
     output reg              branch_decision_o,
     output reg              is_jalr_o,
+    output reg              is_ret_o,
     output reg              is_fencei_o,
 
     // to Execute and BPU
@@ -315,6 +316,7 @@ wire rv32_op = opcode_6_5_01 & opcode_4_2_100;      // OP opcode
 wire rv32_op_imm = opcode_6_5_00 & opcode_4_2_100;  // OP-IMM opcode
 wire rv32_jal = opcode_6_5_11 & opcode_4_2_011;     // JAL opcode
 wire rv32_jalr = opcode_6_5_11 & opcode_4_2_001;    // JARL opcode
+wire rv32_ret = rv32_instr == 32'h00008067;
 wire rv32_load = opcode_6_5_00 & opcode_4_2_000;    // LOAD opcode
 wire rv32_store = opcode_6_5_01 & opcode_4_2_000;   // STORE opcode
 wire rv32_branch = opcode_6_5_11 & opcode_4_2_000;  // BRANCH opcode
@@ -500,6 +502,7 @@ begin
         is_branch_o <= 0;
         is_jal_o <= 0;
         is_jalr_o <= 0;
+        is_ret_o <= 0;
         regfile_we_o <= 1;
         regfile_input_sel_o <= 4; // send Execute result into the RFU.
         we_o <= 0;
@@ -511,7 +514,7 @@ begin
         csr_we_o <= 0;
         csr_imm_o <= 0;
         branch_hit_o <= 0;
-        jalr_hit_o <= 0;
+        ret_hit_o <= 0;
         branch_decision_o <= 0;
         is_fencei_o <= 0;
         amo_type_o <= 0;
@@ -541,6 +544,7 @@ begin
         is_branch_o <= is_branch_o;
         is_jal_o <= is_jal_o;
         is_jalr_o <= is_jalr_o;
+        is_ret_o <= is_ret_o;
         regfile_we_o <= regfile_we_o;
         regfile_input_sel_o <= regfile_input_sel_o;
         we_o <= we_o;
@@ -552,7 +556,7 @@ begin
         csr_we_o <= csr_we_o;
         csr_imm_o <= csr_imm_o;
         branch_hit_o <= branch_hit_o;
-        jalr_hit_o <= jalr_hit_o;
+        ret_hit_o <= ret_hit_o;
         branch_decision_o <= branch_decision_o;
         is_fencei_o <= is_fencei_o;
         amo_type_o <= amo_type_o;
@@ -583,6 +587,7 @@ begin
         is_branch_o <= 0;
         is_jal_o <= 0;
         is_jalr_o <= 0;
+        is_ret_o <= 0;
         regfile_we_o <= 1;
         regfile_input_sel_o <= 4;  // send Execute result into the RFU.
         we_o <= 0;
@@ -594,7 +599,7 @@ begin
         csr_we_o <= 0;
         csr_imm_o <= 0;
         branch_hit_o <= 0;
-        jalr_hit_o <= 0;
+        ret_hit_o <= 0;
         branch_decision_o <= 0;
         is_fencei_o <= 0;
         amo_type_o <= 0;
@@ -624,6 +629,7 @@ begin
         is_branch_o <= rv32_branch;
         is_jal_o <= rv32_jal;
         is_jalr_o <= rv32_jalr;
+        is_ret_o <= rv32_ret;
         regfile_we_o <= regfile_we;
         regfile_input_sel_o <= regfile_input_sel;
         we_o <= we;
@@ -635,7 +641,7 @@ begin
         csr_we_o <= rv32_csr & !((rv32_csrrs | rv32_csrrc) & rv32_instr[19: 15] == 5'b00000);
         csr_imm_o <= csr_imm;
         branch_hit_o <= branch_hit_i;
-        jalr_hit_o <= jalr_hit_i;
+        ret_hit_o <= ret_hit_i;
         branch_decision_o <= branch_decision_i;
         is_fencei_o <= rv32_fencei;
         amo_type_o <= amo_type;

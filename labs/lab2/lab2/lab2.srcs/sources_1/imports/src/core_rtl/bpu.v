@@ -128,7 +128,8 @@ begin
     begin
         if (we) // Execute the branch instruction for the first time.
         begin
-            branch_likelihood[write_addr] <= {branch_taken_i, branch_taken_i};
+           branch_likelihood[write_addr] <= {branch_taken_i, branch_taken_i};
+            // branch_likelihood[write_addr] <= {1'b0, 1'b0};
         end
         else if (exe_is_branch_i)
         begin
