@@ -166,7 +166,7 @@ wire is_ext_addr = (data_sel != 2'b0);
 // System device data bus.
 wire [XLEN-1 : 0]         data_from_sysdev;
 wire                      sysdev_d_ready;
-
+wire [XLEN-1:0]          p_exe2mem_pc;
 // ------ System Memory Map: DDRx DRAM, I/O Devices, or System Devices ---------
 //       [0] 0x0000_0000 - 0x0FFF_FFFF : Tightly-Coupled Memory (TCM)
 //       [1] 0x8000_0000 - 0xBFFF_FFFF : DDRx DRAM memory (cached)
@@ -272,7 +272,9 @@ RISCV_CORE0(
     // Interrupt signals
     .ext_irq_i(1'b0),     // no external interrupt (yet)
     .tmr_irq_i(tmr_irq),
-    .sft_irq_i(sft_irq)
+    .sft_irq_i(sft_irq),
+
+    .exe2mem_pc_o(p_exe2mem_pc)
 );
 
 // ----------------------------------------------------------------------------
@@ -416,7 +418,9 @@ D_Cache(
     .m_data_o(m_d_cache2dram),
     .m_strobe_o(m_d_strobe),
     .m_rw_o(m_d_rw),
-    .m_ready_i(m_d_ready)
+    .m_ready_i(m_d_ready),
+
+    .p_exe2mem_pc_i(p_exe2mem_pc)
 );
 `endif
 

@@ -389,32 +389,37 @@ begin
 end
 
 
+
 //modified code for lab2
 // pc = pc_i
 reg start_cnt_area;
 reg end_cnt_area;
+reg start_cnt_area_dhry;
+reg end_cnt_area_dhry;
 always @(posedge clk_i) begin
     if (rst_i) begin
         start_cnt_area <= 0;
         end_cnt_area <= 0;
+        start_cnt_area_dhry <= 0;
+    end_cnt_area_dhry <= 0;
     end else begin
         //0000_1088 main
        if (pc_i == 32'h0000_1088) begin
-//        if (pc_i == 32'h0000_121c) begin
-//         if (pc_i == 32'h0000_1044) begin
-
             start_cnt_area <= 1;
         end
-        // 0000_01e8 or 0000_01ec end 
+               if (pc_i == 32'h0000_121c) begin
+            start_cnt_area_dhry <= 1;
+        end
        if (pc_i == 32'h0000_1798) begin
-//            if (pc_i == 32'h0000_1900) begin
-//         if (pc_i == 32'h0000_1074) begin
-
                end_cnt_area <= 1;
+        end
+               if (pc_i == 32'h0000_18d8) begin
+               end_cnt_area_dhry <= 1;
         end
     end
 end
 wire total_cycle_flag;
+wire total_flag_dhry = (start_cnt_area_dhry && (!end_cnt_area_dhry));
 //wire core_list_find_flag;
 //wire core_list_reverse_flag;
 //wire core_state_transition_flag;
@@ -429,10 +434,10 @@ assign total_cycle_flag = (start_cnt_area && (!end_cnt_area));
 //assign core_state_transition_flag = (pc_i >= 32'h0000_29f4) && (pc_i <= 32'h0000_2cdc) && total_cycle_flag;
 //assign matrix_mul_matrix_bitextract_flag = (pc_i >= 32'h0000_2650) && (pc_i <= 32'h0000_270c) && total_cycle_flag;
 //assign crcu8_flag = (pc_i >= 32'h0000_19b4) && (pc_i <= 32'h0000_19f8) && total_cycle_flag;
-wire ret_flag = total_cycle_flag && is_ret_i;
-wire ret_miss = ret_flag && (!ret_hit_i);
-wire ret_mispredict = ret_flag && (ret_misprediction_o);
-wire branch =  total_cycle_flag & (is_branch_i | is_jal_i);
+wire ret_flag = is_ret_i;
+wire ret_miss = ret_flag & (!ret_hit_i);
+wire ret_mispredict = ret_flag & (ret_misprediction_o);
+wire branch =  (is_branch_i | is_jal_i);
 //// //cycle count
 //(* mark_debug = "true" *) reg [32-1:0] cl_find_cnt;
 //(* mark_debug = "true" *) reg [32-1:0] cl_reverse_cnt;
@@ -466,11 +471,15 @@ wire branch =  total_cycle_flag & (is_branch_i | is_jal_i);
 //end
 
 (* mark_debug = "true" *) reg [64-1:0] total_cycle_cnt;
+(* mark_debug = "true" *) reg [64-1:0] total_cycle_cnt_dhry;
 (* mark_debug = "true" *) reg [32-1:0] stall_cycle_cnt;
 
 (* mark_debug = "true" *) reg [16-1:0] ret_miss_cnt;
+(* mark_debug = "true" *) reg [16-1:0] ret_miss_cnt_dhry;
 (* mark_debug = "true" *) reg [16-1:0] ret_mispredict_cnt;
+(* mark_debug = "true" *) reg [16-1:0] ret_mispredict_cnt_dhry;
 (* mark_debug = "true" *) reg [32-1:0] ret_cycle_cnt;
+(* mark_debug = "true" *) reg [32-1:0] ret_cycle_cnt_dhry;
 (* mark_debug = "true" *) reg [32-1:0] branch_cycle_cnt;
 always @(posedge clk_i)begin
     if(rst_i)begin
@@ -480,15 +489,23 @@ always @(posedge clk_i)begin
         ret_mispredict_cnt <= 0;
         ret_cycle_cnt <= 0;
         branch_cycle_cnt <= 0;
+        total_cycle_cnt_dhry <= 0;
+        ret_mispredict_cnt_dhry <= 0;
+        ret_cycle_cnt_dhry <= 0;
     end
     if(total_cycle_flag)begin
         total_cycle_cnt <= total_cycle_cnt + 1;
         if(stall_i) stall_cycle_cnt <= stall_cycle_cnt + 1;
     end
-    if(ret_flag) ret_cycle_cnt <= ret_cycle_cnt + 1;
-    if(ret_miss) ret_miss_cnt <= ret_miss_cnt + 1;
-    if(ret_mispredict) ret_mispredict_cnt <= ret_mispredict_cnt + 1;
-    if(branch) branch_cycle_cnt <= branch_cycle_cnt + 1;
+    if(total_flag_dhry) total_cycle_cnt_dhry <= total_cycle_cnt_dhry + 1;
+    if(ret_flag & total_cycle_flag) ret_cycle_cnt <= ret_cycle_cnt + 1;
+    if(ret_miss & total_cycle_flag) ret_miss_cnt <= ret_miss_cnt + 1;
+    if(ret_mispredict & total_cycle_flag) ret_mispredict_cnt <= ret_mispredict_cnt + 1;
+    if(branch & total_cycle_flag) branch_cycle_cnt <= branch_cycle_cnt + 1;
+
+    if(ret_flag & total_flag_dhry) ret_cycle_cnt_dhry <= ret_cycle_cnt_dhry + 1;
+    if(ret_miss & total_flag_dhry) ret_miss_cnt_dhry <= ret_miss_cnt_dhry + 1;
+    if(ret_mispredict & total_flag_dhry) ret_mispredict_cnt_dhry <= ret_mispredict_cnt_dhry + 1;
 end
 
 // wire forward_jump_flag = total_cycle_flag && is_branch_i && (pc_i <  branch_target_addr_o);

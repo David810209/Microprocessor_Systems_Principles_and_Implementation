@@ -123,7 +123,9 @@ module core_top #(
     // Interrupt sources.
     input                 ext_irq_i,
     input                 tmr_irq_i,
-    input                 sft_irq_i
+    input                 sft_irq_i,
+
+    output    [XLEN-1 : 0] exe2mem_pc_o
 );
 
 // ------------------------------
@@ -234,6 +236,7 @@ wire [ 3 : 0]     exe2mem_xcpt_cause;
 wire [XLEN-1 : 0] exe2mem_xcpt_tval;
 wire [XLEN-1 : 0] exe2mem_pc;
 
+assign exe2mem_pc_o = exe2mem_pc;
 // ------------------------------
 //  Memory stage output signals
 // ------------------------------

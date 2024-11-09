@@ -2,7 +2,7 @@
 
 `include "aquila_config.vh"
 
-module rap #( parameter BHT_ENTRY_NUM = 256, RAS_ENTRY_NUM = 4, parameter XLEN = 32 )
+module rap #( parameter BHT_ENTRY_NUM = 512, RAS_ENTRY_NUM = 4, parameter XLEN = 32 )
 (
     // System signals
     input               clk_i,

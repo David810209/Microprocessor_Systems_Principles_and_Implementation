@@ -78,7 +78,7 @@
 // DDRx memory is only accessible via cache controller
 `define ENABLE_DDRx_MEMORY
 `define ICACHE_SIZE 4  // Instruction cache size in KB
-`define DCACHE_SIZE 4  // Data cache size in KB
+`define DCACHE_SIZE 8  // Data cache size in KB
 
 // Branch Prediction
 `define ENABLE_BRANCH_PREDICTION

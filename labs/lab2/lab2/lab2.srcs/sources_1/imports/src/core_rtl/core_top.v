@@ -1106,35 +1106,45 @@ CSR(
 //profiler part
 reg start_cnt_area;
 reg end_cnt_area;
+reg start_cnt_area_dhry;
+reg end_cnt_area_dhry;
 always @(posedge clk_i) begin
     if (rst_i) begin
         start_cnt_area <= 0;
         end_cnt_area <= 0;
+        start_cnt_area_dhry <= 0;
+    end_cnt_area_dhry <= 0;
     end else begin
         //0000_1088 main
-        if (exe2mem_pc == 32'h0000_1088) begin
-//if (exe2mem_pc == 32'h0000_121c) begin
+       if (exe2mem_pc == 32'h0000_1088) begin
             start_cnt_area <= 1;
         end
-        // 0000_01e8 or 0000_01ec end 
-        if (exe2mem_pc == 32'h0000_1798) begin
-//if (exe2mem_pc == 32'h0000_1900) begin
-            end_cnt_area <= 1;
+               if (exe2mem_pc== 32'h0000_121c) begin
+            start_cnt_area_dhry <= 1;
+        end
+       if (exe2mem_pc == 32'h0000_1798) begin
+               end_cnt_area <= 1;
+        end
+               if (exe2mem_pc == 32'h0000_18d8) begin
+               end_cnt_area_dhry <= 1;
         end
     end
 end
 wire total_cycle_flag;
 assign total_cycle_flag = (start_cnt_area && (!end_cnt_area));
+wire total_flag_dhry = (start_cnt_area_dhry && (!end_cnt_area_dhry));
 (* mark_debug = "true" *) reg [32-1:0] total_stall_mem_cnt;
 (* mark_debug = "true" *) reg [32-1:0] total_stall_exe_cnt;
 (* mark_debug = "true" *) reg [32-1:0] total_stall_hazard_cnt;
 (* mark_debug = "true" *) reg [32-1:0] branch_flush_cnt;
+(* mark_debug = "true" *) reg [32-1:0] branch_flush_cnt_dhry;
 always @(posedge clk_i)begin
     if(rst_i)begin
         total_stall_mem_cnt<= 0;
         total_stall_exe_cnt <= 0;
         total_stall_hazard_cnt <= 0;
         branch_flush_cnt <= 0;
+        branch_flush_cnt_dhry <= 0;
     end
     if(((exe_we || exe_re) && ~data_ready_i) && total_cycle_flag)begin
             total_stall_mem_cnt <= total_stall_mem_cnt + 1;
@@ -1147,6 +1157,9 @@ always @(posedge clk_i)begin
     end
     if(plc_branch_flush && total_cycle_flag )begin
         branch_flush_cnt <= branch_flush_cnt + 1;
+    end
+        if(plc_branch_flush && total_flag_dhry )begin
+        branch_flush_cnt_dhry <= branch_flush_cnt_dhry + 1;
     end
 end
 

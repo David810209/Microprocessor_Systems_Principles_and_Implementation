@@ -98,12 +98,23 @@ module dcache
     input                     p_is_amo_i,      // AMO request from core.
     input  [4 : 0]            p_amo_type_i,    // Type of AMO from core.
     output                    m_is_amo_o,      // AMO request to D-memory.
-    output reg [4 : 0]        m_amo_type_o     // Type of AMO to D-memory.
+    output reg [4 : 0]        m_amo_type_o,     // Type of AMO to D-memory.
+
+    input    [XLEN-1 : 0] p_exe2mem_pc_i
 );
 
 //=======================================================
 // Cache parameters
 //=======================================================
+// dcache config
+`define WAY_2
+// `define WAY_4
+// `define WAY_8
+`define FIFO 
+// `define LRU_2
+// `define LRU_4
+// `define LRU_8
+
 localparam N_WAYS      = 4;
 localparam N_LINES     = (CACHE_SIZE*1024*8) / (N_WAYS*CLSIZE);
 
@@ -142,6 +153,8 @@ assign c_data_hit = c_block[hit_index];
 //=======================================================
 reg  [WAY_BITS-1 : 0] FIFO_cnt[0 : N_LINES-1];   // Replace policy counter.
 reg  [WAY_BITS-1 : 0] victim_sel;                // The victim cache select.
+//LRU replacement policy sugnals (modify)
+reg  [WAY_BITS-1 : 0] LRU_cnt[0 : N_LINES-1][0 : N_WAYS-1]; 
 
 //=======================================================
 // Cache line and tag calculations
@@ -280,35 +293,268 @@ begin
 end
 
 // Check and see if any cache way has the matched memory block.
-assign way_hit[0] = (c_valid_o[0] && (c_tag_o[0] == tag))? 1 : 0;
-assign way_hit[1] = (c_valid_o[1] && (c_tag_o[1] == tag))? 1 : 0;
-assign way_hit[2] = (c_valid_o[2] && (c_tag_o[2] == tag))? 1 : 0;
-assign way_hit[3] = (c_valid_o[3] && (c_tag_o[3] == tag))? 1 : 0;
-assign cache_hit  = (way_hit[0] || way_hit[1] || way_hit[2] || way_hit[3]);
+ // -----------------------------2 ways modify ------------------------------
+`ifdef WAY_2
+    assign way_hit[0] = (c_valid_o[0] && (c_tag_o[0] == tag))? 1 : 0;
+    assign way_hit[1] = (c_valid_o[1] && (c_tag_o[1] == tag))? 1 : 0;
 
-always @(*)
-begin
-    case ( { way_hit[0], way_hit[1], way_hit[2], way_hit[3] } )
-        4'b1000: hit_index = 0;
-        4'b0100: hit_index = 1;
-        4'b0010: hit_index = 2;
-        4'b0001: hit_index = 3;
-        default: hit_index = 0; // error: multiple-way hit!
-    endcase
-end
+    assign cache_hit  = (way_hit[0] || way_hit[1]);
 
-always @(posedge clk_i)
-begin
-    victim_sel <= FIFO_cnt[line_index];
-end
+    always @(*)
+    begin
+        case ( { way_hit[0], way_hit[1] } )
+            2'b10: hit_index = 0;
+            2'b01: hit_index = 1;
+            default: hit_index = 0; // error: multiple-way hit!
+        endcase
+    end
+`elsif WAY_4
+   
+    // -----------------------------4 ways modify ------------------------------//
+    assign way_hit[0] = (c_valid_o[0] && (c_tag_o[0] == tag))? 1 : 0;
+    assign way_hit[1] = (c_valid_o[1] && (c_tag_o[1] == tag))? 1 : 0;
+    assign way_hit[2] = (c_valid_o[2] && (c_tag_o[2] == tag))? 1 : 0;
+    assign way_hit[3] = (c_valid_o[3] && (c_tag_o[3] == tag))? 1 : 0;
+    assign cache_hit  = (way_hit[0] || way_hit[1] || way_hit[2] || way_hit[3]);
 
-always @(posedge clk_i)
-begin
-    if (rst_i)
-        for (idx = 0; idx < N_LINES; idx = idx + 1) FIFO_cnt[idx] <= 0;
-    else if (S == RdfromMemFinish)
-        FIFO_cnt[line_index] <= FIFO_cnt[line_index] + 1;
-end
+    always @(*)
+    begin
+        case ( { way_hit[0], way_hit[1], way_hit[2], way_hit[3] } )
+            4'b1000: hit_index = 0;
+            4'b0100: hit_index = 1;
+            4'b0010: hit_index = 2;
+            4'b0001: hit_index = 3;
+            default: hit_index = 0; // error: multiple-way hit!
+        endcase
+    end
+
+`elsif  WAY_8
+    //---------------------8 ways modify----------------------------
+    assign way_hit[0] = (c_valid_o[0] && (c_tag_o[0] == tag))? 1 : 0;
+    assign way_hit[1] = (c_valid_o[1] && (c_tag_o[1] == tag))? 1 : 0;
+    assign way_hit[2] = (c_valid_o[2] && (c_tag_o[2] == tag))? 1 : 0;
+    assign way_hit[3] = (c_valid_o[3] && (c_tag_o[3] == tag))? 1 : 0;
+    assign way_hit[4] = (c_valid_o[4] && (c_tag_o[4] == tag))? 1 : 0;
+    assign way_hit[5] = (c_valid_o[5] && (c_tag_o[5] == tag))? 1 : 0;
+    assign way_hit[6] = (c_valid_o[6] && (c_tag_o[6] == tag))? 1 : 0;
+    assign way_hit[7] = (c_valid_o[7] && (c_tag_o[7] == tag))? 1 : 0;
+    assign cache_hit  = (way_hit[0] || way_hit[1] || way_hit[2] || way_hit[3] 
+                    || way_hit[4] || way_hit[5] || way_hit[6] || way_hit[7]);
+
+    always @(*)
+    begin
+        case ( { way_hit[0], way_hit[1], way_hit[2], way_hit[3], way_hit[4], way_hit[5], way_hit[6], way_hit[7] } )
+            8'b1000_0000: hit_index = 0;
+            8'b0100_0000: hit_index = 1;
+            8'b0010_0000: hit_index = 2;
+            8'b0001_0000: hit_index = 3;
+            8'b0000_1000: hit_index = 4;
+            8'b0000_0100: hit_index = 5;
+            8'b0000_0010: hit_index = 6;
+            8'b0000_0001: hit_index = 7;
+            default: hit_index = 0; // error: multiple-way hit!
+        endcase
+    end
+`endif
+
+//LRU / LFU signals
+reg [WAY_BITS - 1:0] least_use;
+integer j_idx;
+
+`ifdef FIFO
+    //--------------------FIFO modify--------------------------------------------------
+    always @(posedge clk_i)
+    begin
+        victim_sel <= FIFO_cnt[line_index];
+    end
+
+    always @(posedge clk_i)
+    begin
+        if (rst_i)
+            for (idx = 0; idx < N_LINES; idx = idx + 1) FIFO_cnt[idx] <= 0;
+        else if (S == RdfromMemFinish)
+            FIFO_cnt[line_index] <= FIFO_cnt[line_index] + 1;
+    end
+
+`elsif  LRU_2
+    //--------------------LRU modify--------------------------------------------------
+    always @(posedge clk_i)
+    begin
+        victim_sel <= LRU_cnt[line_index][0];
+    end
+    always @(posedge clk_i)
+    begin
+        if(rst_i) begin
+            for (idx = 0; idx < N_LINES; idx = idx + 1) begin
+                for(j_idx = 0;j_idx < N_WAYS; j_idx = j_idx + 1)begin
+                    LRU_cnt[idx][j_idx] <= j_idx;
+                end
+            end
+        end
+        else if(cache_hit && S == Analysis) begin
+            case ( { way_hit[0], way_hit[1]} )
+                2'b10: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][1];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][0];
+                end
+                //2'b01, default not change
+            endcase
+        end
+        else if(S == RdfromMemFinish && !cache_hit)begin
+            LRU_cnt[line_index][0] <= LRU_cnt[line_index][1];
+            LRU_cnt[line_index][1] <= LRU_cnt[line_index][0];
+        end
+    end
+`elsif  LRU_4
+        //4 ways LRU
+    always @(posedge clk_i)
+    begin
+        victim_sel <= LRU_cnt[line_index][0];
+    end
+
+    always @(posedge clk_i)
+    begin
+        if(rst_i) begin
+            for (idx = 0; idx < N_LINES; idx = idx + 1) begin
+                for(j_idx = 0;j_idx < N_WAYS; j_idx = j_idx + 1)begin
+                    LRU_cnt[idx][j_idx] <= j_idx;
+                end
+            end
+        end
+        else if(cache_hit && S == Analysis) begin
+            case ( { way_hit[0], way_hit[1], way_hit[2], way_hit[3]} )
+                4'b1000: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][1];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][2];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][0];
+                end
+                4'b0100: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][0];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][2];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][1];
+                end
+                4'b0010: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][0];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][1];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][2];
+                end
+                //4'b0001, default no change
+            endcase
+        end
+        else if(S == RdfromMemFinish && !cache_hit)begin
+            LRU_cnt[line_index][0] <= LRU_cnt[line_index][1];
+            LRU_cnt[line_index][1] <= LRU_cnt[line_index][2];
+            LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
+            LRU_cnt[line_index][3] <= LRU_cnt[line_index][0];
+        end
+    end
+
+
+`elsif  LRU_8
+        // 8 ways LRU
+    always @(posedge clk_i)
+    begin
+        victim_sel <= LRU_cnt[line_index][0];
+    end
+    always @(posedge clk_i)
+    begin
+        if(rst_i) begin
+            for (idx = 0; idx < N_LINES; idx = idx + 1) begin
+                for(j_idx = 0;j_idx < N_WAYS; j_idx = j_idx + 1)begin
+                    LRU_cnt[idx][j_idx] <= j_idx;
+                end
+            end
+        end
+        else if(cache_hit && S == Analysis) begin
+            case ( { way_hit[0], way_hit[1], way_hit[2], way_hit[3], way_hit[4], way_hit[5], way_hit[6], way_hit[7]} )
+                8'b1000_0000: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][1];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][2];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][4];
+                    LRU_cnt[line_index][4] <= LRU_cnt[line_index][5];
+                    LRU_cnt[line_index][5] <= LRU_cnt[line_index][6];
+                    LRU_cnt[line_index][6] <= LRU_cnt[line_index][7];
+                    LRU_cnt[line_index][7] <= LRU_cnt[line_index][0];
+                end
+                8'b0100_0000: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][0];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][2];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][4];
+                    LRU_cnt[line_index][4] <= LRU_cnt[line_index][5];
+                    LRU_cnt[line_index][5] <= LRU_cnt[line_index][6];
+                    LRU_cnt[line_index][6] <= LRU_cnt[line_index][7];
+                    LRU_cnt[line_index][7] <= LRU_cnt[line_index][1];
+                end
+                8'b0010_0000: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][0];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][1];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][4];
+                    LRU_cnt[line_index][4] <= LRU_cnt[line_index][5];
+                    LRU_cnt[line_index][5] <= LRU_cnt[line_index][6];
+                    LRU_cnt[line_index][6] <= LRU_cnt[line_index][7];
+                    LRU_cnt[line_index][7] <= LRU_cnt[line_index][2];
+                end
+                8'b0001_0000: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][0];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][1];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][2];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][4];
+                    LRU_cnt[line_index][4] <= LRU_cnt[line_index][5];
+                    LRU_cnt[line_index][5] <= LRU_cnt[line_index][6];
+                    LRU_cnt[line_index][6] <= LRU_cnt[line_index][7];
+                    LRU_cnt[line_index][7] <= LRU_cnt[line_index][3];
+                end
+                8'b0000_1000: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][0];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][1];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][2];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][3];
+                    LRU_cnt[line_index][4] <= LRU_cnt[line_index][5];
+                    LRU_cnt[line_index][5] <= LRU_cnt[line_index][6];
+                    LRU_cnt[line_index][6] <= LRU_cnt[line_index][7];
+                    LRU_cnt[line_index][7] <= LRU_cnt[line_index][4];
+                end
+                8'b0000_0100: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][0];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][1];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][2];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][3];
+                    LRU_cnt[line_index][4] <= LRU_cnt[line_index][4];
+                    LRU_cnt[line_index][5] <= LRU_cnt[line_index][6];
+                    LRU_cnt[line_index][6] <= LRU_cnt[line_index][7];
+                    LRU_cnt[line_index][7] <= LRU_cnt[line_index][5];
+                end
+                8'b0000_0010: begin
+                    LRU_cnt[line_index][0] <= LRU_cnt[line_index][0];
+                    LRU_cnt[line_index][1] <= LRU_cnt[line_index][1];
+                    LRU_cnt[line_index][2] <= LRU_cnt[line_index][2];
+                    LRU_cnt[line_index][3] <= LRU_cnt[line_index][3];
+                    LRU_cnt[line_index][4] <= LRU_cnt[line_index][4];
+                    LRU_cnt[line_index][5] <= LRU_cnt[line_index][5];
+                    LRU_cnt[line_index][6] <= LRU_cnt[line_index][7];
+                    LRU_cnt[line_index][7] <= LRU_cnt[line_index][6];
+                end
+                //8'b0000_0001, default no cahnge
+            endcase
+        end
+        else if(S == RdfromMemFinish && !cache_hit)begin
+            LRU_cnt[line_index][0] <= LRU_cnt[line_index][1];
+            LRU_cnt[line_index][1] <= LRU_cnt[line_index][2];
+            LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
+            LRU_cnt[line_index][3] <= LRU_cnt[line_index][4];
+            LRU_cnt[line_index][4] <= LRU_cnt[line_index][5];
+            LRU_cnt[line_index][5] <= LRU_cnt[line_index][6];
+            LRU_cnt[line_index][6] <= LRU_cnt[line_index][7];
+            LRU_cnt[line_index][7] <= LRU_cnt[line_index][0];
+        end
+    end
+`endif
 
 //====================================================
 // Register some signals from the processor/memory.
@@ -773,5 +1019,134 @@ generate
              );
     end
 endgenerate
+
+//=======================================================
+//  profiler for lab3 
+//=======================================================
+(*mark_debug = "true"*) reg [32-1:0] read_cnt;
+(*mark_debug = "true"*) reg [32-1:0] write_cnt;
+(*mark_debug = "true"*) reg [32-1:0] total_cnt;
+(*mark_debug = "true"*) reg [32-1:0] read_hit_cnt;
+(*mark_debug = "true"*) reg [32-1:0] read_miss_cnt;
+
+(*mark_debug = "true"*) reg [32-1:0] miss_lat_cnt;
+
+(*mark_debug = "true"*) reg [32-1:0] write_hit_cnt;
+(*mark_debug = "true"*) reg [32-1:0] write_miss_cnt;
+
+(*mark_debug = "true"*) reg [32-1:0] read_hit_latency;
+(*mark_debug = "true"*) reg [32-1:0] write_hit_latency;
+
+(*mark_debug = "true"*) reg [32-1:0] read_miss_latency;
+(*mark_debug = "true"*) reg [32-1:0] write_miss_latency;
+
+(*mark_debug = "true"*) reg [32-1:0] miss_wb_lat;
+(*mark_debug = "true"*) reg [32-1:0] miss_not_wb_lat;
+
+reg [32-1:0] current_lat;
+reg start_flag;
+reg end_flag;
+wire count_area = start_flag && !end_flag;
+always @(posedge clk_i)begin
+    if(rst_i) begin 
+        current_lat <= 0;
+        start_flag <= 0;
+        end_flag <= 0;
+        total_cnt <= 0;
+    end
+    if(p_exe2mem_pc_i == 32'h8000_1600) //main
+    begin
+        start_flag <= 1;
+    end
+    // 0000_01e8 or 0000_01ec end 
+    if(p_exe2mem_pc_i == 32'h8000_17dc) begin
+        end_flag<= 1;
+    end
+    if(count_area)begin
+        total_cnt <= total_cnt + 1;
+    end
+    if(S == Idle && p_strobe_i && count_area) begin 
+        current_lat <= 1;
+    end
+    else if (S != Idle && count_area)begin
+        current_lat <= current_lat + 1;
+    end 
+end
+
+wire not_wb_flag = ( (S == Analysis) || (S == RdfromMem) || (S == RdfromMemFinish)) && count_area;
+wire wb_flag = (not_wb_flag || (S == WbtoMem) || (S == WbtoMemFinish) ) && count_area;
+
+always @(posedge clk_i)
+begin
+    if(rst_i)begin
+        miss_wb_lat <= 0;
+        miss_not_wb_lat <= 0;
+    end
+    else begin
+        if(wb_flag)begin
+            miss_wb_lat <= miss_wb_lat + 1;
+        end
+
+        if(not_wb_flag)begin
+            miss_not_wb_lat <= miss_not_wb_lat + 1;
+        end
+    end
+end
+
+always @(posedge clk_i)
+begin
+    if (rst_i)begin
+        read_cnt <= 0;
+        write_cnt <= 0;
+        read_hit_latency <= 0;
+        read_miss_latency <= 0;
+        write_hit_latency <= 0;
+        write_miss_latency <= 0;
+        read_hit_cnt <= 0;
+        read_miss_cnt <= 0;
+        write_hit_cnt <= 0;
+        write_miss_cnt <= 0;
+        miss_lat_cnt <= 0;
+        
+    end
+    else begin
+        if(S == Idle && p_strobe_i && count_area)begin
+            if(p_rw_i)begin
+                write_cnt <= write_cnt + 1;
+            end
+            else begin
+                read_cnt <= read_cnt + 1;
+            end
+        end
+
+        else if((S == Analysis && count_area) && ~p_is_amo_i && !p_flush_i)begin
+            if (cache_hit)begin
+
+                if(rw)begin
+                    write_hit_latency <= write_hit_latency + current_lat;
+                    write_hit_cnt <= write_hit_cnt + 1;
+                end
+                else begin
+                    read_hit_latency <= read_hit_latency + current_lat;
+                    read_hit_cnt <= read_hit_cnt + 1;
+                end
+            end
+        end
+
+        else if(S == RdfromMemFinish && count_area)begin
+            miss_lat_cnt <= miss_lat_cnt + current_lat;
+            if(rw) begin
+                write_miss_cnt <= write_miss_cnt + 1;
+                write_miss_latency <= write_miss_latency + current_lat;
+            end
+            else begin
+                read_miss_cnt <= read_miss_cnt + 1;
+                read_miss_latency <= read_miss_latency + current_lat;
+            end
+            
+        end
+    end
+
+end
 
 endmodule
