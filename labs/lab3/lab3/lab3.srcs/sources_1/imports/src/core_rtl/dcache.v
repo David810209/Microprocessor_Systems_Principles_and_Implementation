@@ -107,15 +107,17 @@ module dcache
 // Cache parameters
 //=======================================================
 // dcache config
-`define WAY_2
-// `define WAY_4
-// `define WAY_8
-`define FIFO 
-// `define LRU_2
+// `define WAY_1
+//  `define WAY_2
+//`define WAY_4
+`define WAY_8
+// `define DIRECT
+//`define FIFO 
+//  `define LRU_2
 // `define LRU_4
-// `define LRU_8
+`define LRU_8
 
-localparam N_WAYS      = 4;
+localparam N_WAYS      = 8;
 localparam N_LINES     = (CACHE_SIZE*1024*8) / (N_WAYS*CLSIZE);
 
 localparam WAY_BITS    = $clog2(N_WAYS);
@@ -185,8 +187,8 @@ reg              is_amo_reg;
 reg              p_ready_reg;
 
 // Input data from memory /////////////////////////////////////////////////
-reg [CLSIZE-1 : 0] m_data;
-
+wire [CLSIZE-1 : 0] m_data;
+reg [CLSIZE-1 : 0] m_data_r;
 //=======================================================
 // Control signals for flushing all cache blocks
 //=======================================================
@@ -249,18 +251,20 @@ begin
                 S_nxt = Idle;
         WbtoMem:
             if (m_ready_i)
-                S_nxt = WbtoMemFinish;
+                // S_nxt = WbtoMemFinish;
+                S_nxt =  (p_is_amo_i)? RdAmo : RdfromMem;
             else
                 S_nxt = WbtoMem;
-        WbtoMemFinish:
-            S_nxt = (p_is_amo_i)? RdAmo : RdfromMem;
+        // WbtoMemFinish:
+        //     S_nxt = (p_is_amo_i)? RdAmo : RdfromMem;
         RdfromMem:
             if (m_ready_i)
-                S_nxt = RdfromMemFinish;
+                // S_nxt = RdfromMemFinish;
+                S_nxt = Idle;
             else
                 S_nxt = RdfromMem;
-        RdfromMemFinish:
-            S_nxt = Idle;
+        // RdfromMemFinish:
+        //     S_nxt = Idle;
         WbtoMemAll:
             if (NeedtoWb)
                 if (m_ready_i)
@@ -291,10 +295,15 @@ begin
     else
         init_count <= {LINE_BITS{1'b0}};
 end
-
-// Check and see if any cache way has the matched memory block.
+ // ----------------------------direct map modify ------------------------------
+`ifdef WAY_1
+    assign way_hit[0] = (c_valid_o[0] && (c_tag_o[0] == tag))? 1 : 0;
+    assign cache_hit  = way_hit[0];
+    always @(*)begin
+        hit_index <= 0;
+    end
  // -----------------------------2 ways modify ------------------------------
-`ifdef WAY_2
+`elsif WAY_2
     assign way_hit[0] = (c_valid_o[0] && (c_tag_o[0] == tag))? 1 : 0;
     assign way_hit[1] = (c_valid_o[1] && (c_tag_o[1] == tag))? 1 : 0;
 
@@ -361,7 +370,13 @@ end
 reg [WAY_BITS - 1:0] least_use;
 integer j_idx;
 
-`ifdef FIFO
+`ifdef DIRECT
+ always @(posedge clk_i)
+    begin
+    victim_sel <= 0;
+end
+
+`elsif  FIFO
     //--------------------FIFO modify--------------------------------------------------
     always @(posedge clk_i)
     begin
@@ -372,7 +387,8 @@ integer j_idx;
     begin
         if (rst_i)
             for (idx = 0; idx < N_LINES; idx = idx + 1) FIFO_cnt[idx] <= 0;
-        else if (S == RdfromMemFinish)
+        // else if (S == RdfromMemFinish)
+        else if (S == RdfromMem && m_ready_i)
             FIFO_cnt[line_index] <= FIFO_cnt[line_index] + 1;
     end
 
@@ -400,7 +416,8 @@ integer j_idx;
                 //2'b01, default not change
             endcase
         end
-        else if(S == RdfromMemFinish && !cache_hit)begin
+        // else if(S == RdfromMemFinish && !cache_hit)begin
+        else if (S == RdfromMem && m_ready_i && !cache_hit) begin
             LRU_cnt[line_index][0] <= LRU_cnt[line_index][1];
             LRU_cnt[line_index][1] <= LRU_cnt[line_index][0];
         end
@@ -444,7 +461,8 @@ integer j_idx;
                 //4'b0001, default no change
             endcase
         end
-        else if(S == RdfromMemFinish && !cache_hit)begin
+        // else if(S == RdfromMemFinish && !cache_hit)begin
+        else if (S == RdfromMem && m_ready_i && !cache_hit) begin
             LRU_cnt[line_index][0] <= LRU_cnt[line_index][1];
             LRU_cnt[line_index][1] <= LRU_cnt[line_index][2];
             LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
@@ -543,7 +561,8 @@ integer j_idx;
                 //8'b0000_0001, default no cahnge
             endcase
         end
-        else if(S == RdfromMemFinish && !cache_hit)begin
+        // else if(S == RdfromMemFinish && !cache_hit)begin
+        else if (S == RdfromMem && m_ready_i && !cache_hit) begin
             LRU_cnt[line_index][0] <= LRU_cnt[line_index][1];
             LRU_cnt[line_index][1] <= LRU_cnt[line_index][2];
             LRU_cnt[line_index][2] <= LRU_cnt[line_index][3];
@@ -589,12 +608,13 @@ end
 // Register the input data from the main memory.
 always @(posedge clk_i)
 begin
-    if (S == RdfromMem || S == RdAmo)
-        m_data <= m_data_i;
+    if (S == RdAmo)
+        m_data_r <= m_data_i;
     else
-        m_data <= m_data;
+        m_data_r <= m_data_r;
 end
 
+assign m_data = (S == RdAmo) ? m_data_r : m_data_i;
 //=======================================================
 // Write back all cache blocks to the main memory
 //=======================================================
@@ -678,7 +698,8 @@ begin // Note: p_data_o is significant when processor read data
         p_data_o = m_data[CLSIZE-1:CLSIZE-XLEN];
     else if ((S == Analysis) && cache_hit && !rw)
         p_data_o = fromCache;
-    else if ((S == RdfromMemFinish) && !rw)
+    // else if ((S == RdfromMemFinish) && !rw)
+    else if (S == RdfromMem && m_ready_i && !rw) 
         p_data_o = fromMem;
     else
         p_data_o = {XLEN{1'b0}};
@@ -687,7 +708,8 @@ end
 always @(*)
 begin
     if (((S == Analysis) && cache_hit && ~p_is_amo_i && !p_flush_i) ||
-        (S == RdfromMemFinish) ||
+        // (S == RdfromMemFinish) ||
+        (S == RdfromMem && m_ready_i) ||
         (S == RdAmoFinish) ||
         (S == WbtoMemAllFinish && WbAllFinish_r))
         p_ready_reg = 1;
@@ -764,29 +786,35 @@ always @(*)
 begin           // write miss : write hit;
     case (byte_enable_from_p)
         // DataMem_Addr[1:0] == 2'b00
-        4'b0001: update_data = (S == RdfromMemFinish) ?
+        // 4'b0001: update_data = (S == RdfromMemFinish) ?
+        4'b0001: update_data = (S == RdfromMem && m_ready_i) ?
                       { fromMem[31:8], datain_from_p[7:0] } :
                       { fromCache[31:8], datain_from_p[7:0] };
-        4'b0011: update_data = (S == RdfromMemFinish) ?
+        // 4'b0011: update_data = (S == RdfromMemFinish) ?
+        4'b0011: update_data = (S == RdfromMem && m_ready_i) ?
                       { fromMem[31:16], datain_from_p[15:0] } :
                       { fromCache[31:16], datain_from_p[15:0]};
         4'b1111: update_data = datain_from_p;
 
         // DataMem_Addr[1:0] == 2'b01
-        4'b0010: update_data = (S == RdfromMemFinish) ?
+        // 4'b0010: update_data = (S == RdfromMemFinish) ?
+        4'b0010: update_data = (S == RdfromMem && m_ready_i) ?
                       { fromMem[31:16], datain_from_p[15:8], fromMem[7:0] } :
                       { fromCache[31 : 16], datain_from_p[15:8], fromCache[7:0] };
 
         // DataMem_Addr[1:0] == 2'b10
-        4'b0100: update_data = (S == RdfromMemFinish) ?
+        // 4'b0100: update_data = (S == RdfromMemFinish) ?
+        4'b0100: update_data = (S == RdfromMem && m_ready_i) ?
                       { fromMem[31:24], datain_from_p[23:16], fromMem[15:0] } :
                       { fromCache[31:24], datain_from_p[23:16], fromCache[15:0] };
-        4'b1100: update_data = (S == RdfromMemFinish) ?
+        // 4'b1100: update_data = (S == RdfromMemFinish) ?
+        4'b1100: update_data = (S == RdfromMem && m_ready_i) ?
                       { datain_from_p[31:16], fromMem[15:0] } :
                       { datain_from_p[31:16], fromCache[15:0] };
 
         // DataMem_Addr[1:0] == 2'b11
-        4'b1000: update_data = (S == RdfromMemFinish) ?
+        // 4'b1000: update_data = (S == RdfromMemFinish) ?
+        4'b1000: update_data = (S == RdfromMem && m_ready_i) ?
                       { datain_from_p[31:24], fromMem[23:0] } :
                       { datain_from_p[31:24], fromCache[23:0] };
         default: update_data = 32'b0;
@@ -840,11 +868,13 @@ end
 always @(*)
 begin
     if (!rw) // Processor read miss and update cache data
-        c_data_i = (S == RdfromMemFinish) ? m_data : {CLSIZE{1'b0}};
+        // c_data_i = (S == RdfromMemFinish) ? m_data : {CLSIZE{1'b0}};
+         c_data_i = (S == RdfromMem && m_ready_i) ? m_data : {CLSIZE{1'b0}};
     else begin   // Processor write cache
         if ( (S == Analysis) && cache_hit ) // write hit
             c_data_i = c_data_update;
-        else if (S == RdfromMemFinish)      // write miss
+        // else if (S == RdfromMemFinish)      // write miss
+        else if (S == RdfromMem && m_ready_i)      // write miss
             c_data_i = m_data_update;
         else
             c_data_i = {CLSIZE{1'b0}};
@@ -895,7 +925,8 @@ begin
     if ((S == Analysis) && cache_hit && rw)
         for (idx = 0; idx < N_WAYS; idx = idx + 1)
             cache_write[idx] = way_hit[idx];
-    else if (S == RdfromMemFinish)
+    // else if (S == RdfromMemFinish)
+    else if (S == RdfromMem && m_ready_i)
         for (idx = 0; idx < N_WAYS; idx = idx + 1)
             cache_write[idx] = (idx == victim_sel);
     else
@@ -1034,25 +1065,26 @@ endgenerate
 (*mark_debug = "true"*) reg [32-1:0] write_hit_cnt;
 (*mark_debug = "true"*) reg [32-1:0] write_miss_cnt;
 
-(*mark_debug = "true"*) reg [32-1:0] read_hit_latency;
-(*mark_debug = "true"*) reg [32-1:0] write_hit_latency;
+ reg [32-1:0] read_hit_latency;
+reg [32-1:0] write_hit_latency;
 
 (*mark_debug = "true"*) reg [32-1:0] read_miss_latency;
 (*mark_debug = "true"*) reg [32-1:0] write_miss_latency;
 
 (*mark_debug = "true"*) reg [32-1:0] miss_wb_lat;
 (*mark_debug = "true"*) reg [32-1:0] miss_not_wb_lat;
+(*mark_debug = "true"*) reg [32-1:0] read_miss_dirty_cnt;
+(*mark_debug = "true"*) reg [32-1:0] write_miss_dirty_cnt;
+(*mark_debug = "true"*) reg [32-1:0] read_miss_clean_cnt;
+(*mark_debug = "true"*) reg [32-1:0] write_miss_clean_cnt;
 
 reg [32-1:0] current_lat;
 reg start_flag;
 reg end_flag;
-wire count_area = start_flag && !end_flag;
 always @(posedge clk_i)begin
     if(rst_i) begin 
-        current_lat <= 0;
         start_flag <= 0;
         end_flag <= 0;
-        total_cnt <= 0;
     end
     if(p_exe2mem_pc_i == 32'h8000_1600) //main
     begin
@@ -1061,6 +1093,15 @@ always @(posedge clk_i)begin
     // 0000_01e8 or 0000_01ec end 
     if(p_exe2mem_pc_i == 32'h8000_17dc) begin
         end_flag<= 1;
+    end
+end
+
+wire count_area = start_flag && !end_flag;
+
+always @(posedge clk_i)begin
+    if(rst_i) begin 
+        current_lat <= 0;
+        total_cnt <= 0;
     end
     if(count_area)begin
         total_cnt <= total_cnt + 1;
@@ -1073,8 +1114,8 @@ always @(posedge clk_i)begin
     end 
 end
 
-wire not_wb_flag = ( (S == Analysis) || (S == RdfromMem) || (S == RdfromMemFinish)) && count_area;
-wire wb_flag = (not_wb_flag || (S == WbtoMem) || (S == WbtoMemFinish) ) && count_area;
+wire not_wb_flag = ( (S == Analysis) || (S == RdfromMem) || (S == RdfromMem && m_ready_i)) && count_area;
+wire wb_flag = (not_wb_flag || (S == WbtoMem) || (S == WbtoMem && m_ready_i) ) && count_area;
 
 always @(posedge clk_i)
 begin
@@ -1096,44 +1137,14 @@ end
 always @(posedge clk_i)
 begin
     if (rst_i)begin
-        read_cnt <= 0;
-        write_cnt <= 0;
-        read_hit_latency <= 0;
         read_miss_latency <= 0;
-        write_hit_latency <= 0;
         write_miss_latency <= 0;
-        read_hit_cnt <= 0;
         read_miss_cnt <= 0;
-        write_hit_cnt <= 0;
         write_miss_cnt <= 0;
         miss_lat_cnt <= 0;
-        
     end
     else begin
-        if(S == Idle && p_strobe_i && count_area)begin
-            if(p_rw_i)begin
-                write_cnt <= write_cnt + 1;
-            end
-            else begin
-                read_cnt <= read_cnt + 1;
-            end
-        end
-
-        else if((S == Analysis && count_area) && ~p_is_amo_i && !p_flush_i)begin
-            if (cache_hit)begin
-
-                if(rw)begin
-                    write_hit_latency <= write_hit_latency + current_lat;
-                    write_hit_cnt <= write_hit_cnt + 1;
-                end
-                else begin
-                    read_hit_latency <= read_hit_latency + current_lat;
-                    read_hit_cnt <= read_hit_cnt + 1;
-                end
-            end
-        end
-
-        else if(S == RdfromMemFinish && count_area)begin
+        if(S == RdfromMem && m_ready_i && count_area)begin
             miss_lat_cnt <= miss_lat_cnt + current_lat;
             if(rw) begin
                 write_miss_cnt <= write_miss_cnt + 1;
@@ -1145,8 +1156,78 @@ begin
             end
             
         end
+        
     end
 
 end
+
+
+
+always @(posedge clk_i)
+begin
+    if (rst_i)begin
+        read_cnt <= 0;
+        write_cnt <= 0;
+    end
+    else begin
+        if(S == Idle && p_strobe_i && count_area)begin
+            if(p_rw_i)begin
+                write_cnt <= write_cnt + 1;
+            end
+            else begin
+                read_cnt <= read_cnt + 1;
+            end
+        end
+    end
+
+end
+
+
+always @(posedge clk_i)
+begin
+    if (rst_i)begin
+        read_hit_latency <= 0;
+        write_hit_latency <= 0;
+        read_hit_cnt <= 0;
+        write_hit_cnt <= 0;
+        read_miss_dirty_cnt <= 0;
+        read_miss_clean_cnt <= 0;
+        write_miss_clean_cnt <= 0;
+        write_miss_dirty_cnt <= 0;
+        
+    end
+    else begin
+        if(S == Analysis && count_area)begin
+            if (cache_hit)begin
+                if(rw)begin
+                    write_hit_latency <= write_hit_latency + current_lat;
+                    write_hit_cnt <= write_hit_cnt + 1;
+                end
+                else begin
+                    read_hit_latency <= read_hit_latency + current_lat;
+                    read_hit_cnt <= read_hit_cnt + 1;
+                end
+            end
+            else if(!c_dirty_o[victim_sel]) begin
+                if(rw) begin
+                    write_miss_clean_cnt <= write_miss_clean_cnt + 1;
+                end
+                else begin
+                    read_miss_clean_cnt <= read_miss_clean_cnt + 1;
+                end
+            end
+            else begin
+                if(rw) begin
+                    write_miss_dirty_cnt <= write_miss_dirty_cnt + 1;
+                end 
+                else begin
+                    read_miss_dirty_cnt <= read_miss_dirty_cnt + 1;
+                end
+            end
+        end
+    end
+
+end
+
 
 endmodule

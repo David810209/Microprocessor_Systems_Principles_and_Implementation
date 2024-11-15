@@ -212,11 +212,9 @@ module mem_arbiter #(
     //  Strobe signals selection (Priority : I-MEM > D-MEM)
     //=======================================================
     always @(*) begin
-        // if (S_IMEM_strobe_r) 
-        if (S_IMEM_strobe_r || S_IMEM_strobe_i) 
+        if (S_IMEM_strobe_r) 
             sel = I_STROBE;
-        // else if (S_DMEM_strobe_r) 
-        else if (S_DMEM_strobe_r || S_DMEM_strobe_i)  
+        else if (S_DMEM_strobe_r) 
             sel = D_STROBE;
         else
             sel = 0;
@@ -224,10 +222,8 @@ module mem_arbiter #(
 
     always @(*) begin
         case (sel)
-            // I_STROBE: addr = S_IMEM_addr_r[DRAM_ADDR_LSBIT +: 27];
-            // D_STROBE: addr = S_DMEM_addr_r[DRAM_ADDR_LSBIT +: 27];
-            I_STROBE: addr =( S_IMEM_strobe_i) ?  S_IMEM_addr_i[DRAM_ADDR_LSBIT +: 27] : S_IMEM_addr_r[DRAM_ADDR_LSBIT +: 27];
-            D_STROBE: addr = ( S_DMEM_strobe_i) ?  S_DMEM_addr_i[DRAM_ADDR_LSBIT +: 27] : S_DMEM_addr_r[DRAM_ADDR_LSBIT +: 27];
+            I_STROBE: addr = S_IMEM_addr_r[DRAM_ADDR_LSBIT +: 27];
+            D_STROBE: addr = S_DMEM_addr_r[DRAM_ADDR_LSBIT +: 27];
             default : addr = 0;
         endcase
     end
@@ -235,7 +231,7 @@ module mem_arbiter #(
     always @(*) begin
         case (sel)
             I_STROBE: rw = 0; // I-MEM is read-only
-            D_STROBE: rw = ( S_DMEM_strobe_i) ?  S_DMEM_rw_i : S_DMEM_rw_r;
+            D_STROBE: rw = S_DMEM_rw_r;
             default : rw = 0;
         endcase
     end
@@ -244,7 +240,7 @@ module mem_arbiter #(
         case (sel) // (for scalability, you may assign wdata only with D-MEM's case)
             I_STROBE: wdata = 0; // I-MEM is read-only
 `ifdef ARTY
-            D_STROBE: wdata = ( S_DMEM_strobe_i) ? S_DMEM_data_i :   S_DMEM_data_r;
+            D_STROBE: wdata = S_DMEM_data_r;
             default : wdata = {CLSIZE{1'b0}};
 `else // KC705
             D_STROBE: wdata = (addr[2])? {S_DMEM_data_r, {CLSIZE{1'b0}}} : {{CLSIZE{1'b0}}, S_DMEM_data_r};
@@ -337,7 +333,7 @@ module mem_arbiter #(
         endcase
     end
 
-    assign have_strobe = S_IMEM_strobe_r | S_DMEM_strobe_r | S_IMEM_strobe_i | S_DMEM_strobe_i;
+    assign have_strobe = S_IMEM_strobe_r | S_DMEM_strobe_r;
     assign mig_ready   = (rw_r)? M_MEM_rdy_i && M_MEM_wdf_rdy_i : M_MEM_rdy_i;
 
     //=======================================================
