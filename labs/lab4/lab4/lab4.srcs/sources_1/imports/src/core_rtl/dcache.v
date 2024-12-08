@@ -787,13 +787,6 @@ endgenerate
 (*mark_debug = "true"*) reg [32-1:0] write_hit_cnt;
 (*mark_debug = "true"*) reg [32-1:0] write_miss_cnt;
 
-
-(*mark_debug = "true"*) reg [32-1:0] read_miss_dirty_cnt;
-(*mark_debug = "true"*) reg [32-1:0] write_miss_dirty_cnt;
-(*mark_debug = "true"*) reg [32-1:0] read_miss_clean_cnt;
-(*mark_debug = "true"*) reg [32-1:0] write_miss_clean_cnt;
-
-
 wire count_area = total_flag_i;
 
 
@@ -845,10 +838,6 @@ begin
    if (rst_i)begin
        read_hit_cnt <= 0;
        write_hit_cnt <= 0;
-       read_miss_dirty_cnt <= 0;
-       read_miss_clean_cnt <= 0;
-       write_miss_clean_cnt <= 0;
-       write_miss_dirty_cnt <= 0;
         
    end
    else begin
@@ -859,22 +848,6 @@ begin
                end
                else begin
                    read_hit_cnt <= read_hit_cnt + 1;
-               end
-           end
-           else if(!c_dirty_o[victim_sel]) begin
-               if(rw) begin
-                   write_miss_clean_cnt <= write_miss_clean_cnt + 1;
-               end
-               else begin
-                   read_miss_clean_cnt <= read_miss_clean_cnt + 1;
-               end
-           end
-           else begin
-               if(rw) begin
-                   write_miss_dirty_cnt <= write_miss_dirty_cnt + 1;
-               end 
-               else begin
-                   read_miss_dirty_cnt <= read_miss_dirty_cnt + 1;
                end
            end
        end

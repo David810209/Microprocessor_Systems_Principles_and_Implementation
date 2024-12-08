@@ -403,7 +403,8 @@ assign regfile_we = rv32_lui | rv32_auipc | rv32_load | rv32_op_imm |
                     rv32_op | rv32_csr | rv32_amo | rv32_jal | rv32_jalr;
 
 assign re = rv32_load | rv32_amo; // AMO instr. also need to load d-cache data
-assign we = rv32_store | rv32_fencei;
+// assign we = rv32_store | rv32_fencei;
+assign we = rv32_store;
 
 assign rd_addr = rv32_instr[11: 7];
 assign rs1_addr_o = rv32_instr[19: 15];
