@@ -39,6 +39,7 @@ void Task2_Handler(void *pvParameters);
 
 #define COUNTER_LIMIT 10000
 #define USE_MUTEX 1
+#define USE_SEMAPHORE 1
 
 #if USE_MUTEX
 xSemaphoreHandle xMutex; // a mutex used to protect shared variable.
@@ -117,7 +118,11 @@ void Task1_Handler(void *pvParameters)
     {
         /* Only one thread can modify the shared variable at one time */
 #if USE_MUTEX
+#if USE_SEMAPHORE
         xSemaphoreTake(xMutex, portMAX_DELAY);
+#else
+        taskENTER_CRITICAL();
+#endif
 #endif
         done = (shared_counter >= COUNTER_LIMIT);
         if (!done)
@@ -126,7 +131,11 @@ void Task1_Handler(void *pvParameters)
             task1_counter++;
         }
 #if USE_MUTEX
+#if USE_SEMAPHORE
         xSemaphoreGive(xMutex);
+#else
+        taskEXIT_CRITICAL();
+#endif
 #endif
         pi_calc(iter--, pi); // Busy computations of PI.
     }
@@ -164,7 +173,11 @@ void Task2_Handler(void *pvParameters)
     {
         /* Only one thread can modify the shared variable at one time */
 #if USE_MUTEX
+#if USE_SEMAPHORE
         xSemaphoreTake(xMutex, portMAX_DELAY);
+#else
+        taskENTER_CRITICAL();
+#endif
 #endif
         done = (shared_counter >= COUNTER_LIMIT);
         if (!done)
@@ -173,7 +186,11 @@ void Task2_Handler(void *pvParameters)
             task2_counter++;
         }
 #if USE_MUTEX
+#if USE_SEMAPHORE
         xSemaphoreGive(xMutex);
+#else
+        taskEXIT_CRITICAL();
+#endif
 #endif
         /* Busy random number generations. */
         for (int idx = 0; idx < 500; idx++) t2out = rand();

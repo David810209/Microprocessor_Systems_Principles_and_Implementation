@@ -91,6 +91,5 @@
 
 // Fetch
 `define NOP 32'h00000013
-
 // SIM_FNAME defines the RISC-V program path of an ELF file for simulation.
-`define SIM_FNAME "D://hello.elf"
+`define SIM_FNAME "C://zichen//mpd//aquila_sw//rtos_run//rtos_run.elf"

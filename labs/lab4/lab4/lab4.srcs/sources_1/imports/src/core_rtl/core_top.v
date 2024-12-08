@@ -388,9 +388,9 @@ end
 // =============================================================================
 always@(*) begin
     if (!wbk2csr_xcpt_valid) begin
-        if (mem2wbk_fetch_valid)
-            nxt_unwb_PC = mem2wbk_pc;
-        else if (exe2mem_fetch_valid)
+        // if (mem2wbk_fetch_valid)
+        //     nxt_unwb_PC = mem2wbk_pc;
+        if (exe2mem_fetch_valid)
             nxt_unwb_PC = exe2mem_pc;
         else if (dec2exe_fetch_valid)
             nxt_unwb_PC = dec_pc;
@@ -873,7 +873,11 @@ execute Execute(
     .xcpt_tval_i(dec2exe_xcpt_tval),
     .xcpt_valid_o(exe2mem_xcpt_valid),
     .xcpt_cause_o(exe2mem_xcpt_cause),
-    .xcpt_tval_o(exe2mem_xcpt_tval)
+    .xcpt_tval_o(exe2mem_xcpt_tval),
+
+    .total_flag_o(total_flag),
+
+    .test_pc_i(wbk2csr_pc)
 );
 
 // =============================================================================
@@ -1044,9 +1048,7 @@ CSR(
     // Exception requests
     .xcpt_valid_i(wbk2csr_xcpt_valid),
     .xcpt_cause_i(wbk2csr_xcpt_cause),
-    .xcpt_tval_i(wbk2csr_xcpt_tval),
-
-    .total_flag_o(total_flag)
+    .xcpt_tval_i(wbk2csr_xcpt_tval)
 );
 
 endmodule
